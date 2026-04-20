@@ -53,7 +53,7 @@ export default function RegulationsMasterPage() {
         (item.id && item.id.toString().includes(filterTerm))
       );
     }
-    return filtered.sort((a, b) => a.id - b.id);
+    return filtered.sort((a, b) => (a.regulation_name || '').localeCompare(b.regulation_name || ''));
   }, [items, filterTerm]);
 
   const handleSearch = () => {

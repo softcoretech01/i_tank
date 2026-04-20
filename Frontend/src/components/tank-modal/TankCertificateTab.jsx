@@ -11,10 +11,12 @@ const unwrap = (response) => {
 };
 
 const PDF_SLOTS = [
-  { field: 'periodic_inspection_pdf_path', nameField: 'periodic_inspection_pdf_name', label: 'Periodic Inspection PDF', color: 'blue' },
-  { field: 'next_insp_pdf_path', nameField: 'next_insp_pdf_name', label: 'Next Inspection PDF', color: 'indigo' },
-  { field: 'new_certificate_file', nameField: 'new_certificate_file_name', label: 'New Certificate PDF', color: 'green' },
-  { field: 'old_certificate_file', nameField: 'old_certificate_file_name', label: 'Old Certificate PDF', color: 'amber' },
+  { field: 'initial_certificate_path', nameField: 'initial_certificate_name', label: 'Initial Certificate', color: 'blue' },
+  { field: 'certificate1_path', nameField: 'certificate1_name', label: 'Certificate 1', color: 'indigo' },
+  { field: 'certificate2_path', nameField: 'certificate2_name', label: 'Certificate 2', color: 'green' },
+  { field: 'certificate3_path', nameField: 'certificate3_name', label: 'Certificate 3', color: 'amber' },
+  { field: 'certificate4_path', nameField: 'certificate4_name', label: 'Certificate 4', color: 'purple' },
+  { field: 'certificate5_path', nameField: 'certificate5_name', label: 'Certificate 5', color: 'teal' },
 ];
 
 const colorMap = {
@@ -22,6 +24,8 @@ const colorMap = {
   indigo: { icon: 'bg-indigo-100 text-indigo-600', badge: 'text-indigo-500', btn: 'text-indigo-600 border-indigo-200 hover:bg-indigo-600 hover:text-white hover:border-indigo-600', card: 'border-indigo-100 bg-indigo-50/30 hover:bg-indigo-50 hover:border-indigo-300' },
   green: { icon: 'bg-green-100 text-green-600', badge: 'text-green-500', btn: 'text-green-600 border-green-200 hover:bg-green-600 hover:text-white hover:border-green-600', card: 'border-green-100 bg-green-50/30 hover:bg-green-50 hover:border-green-300' },
   amber: { icon: 'bg-amber-100 text-amber-600', badge: 'text-amber-500', btn: 'text-amber-600 border-amber-200 hover:bg-amber-600 hover:text-white hover:border-amber-600', card: 'border-amber-100 bg-amber-50/30 hover:bg-amber-50 hover:border-amber-300' },
+  purple: { icon: 'bg-purple-100 text-purple-600', badge: 'text-purple-500', btn: 'text-purple-600 border-purple-200 hover:bg-purple-600 hover:text-white hover:border-purple-600', card: 'border-purple-100 bg-purple-50/30 hover:bg-purple-50 hover:border-purple-300' },
+  teal: { icon: 'bg-teal-100 text-teal-600', badge: 'text-teal-500', btn: 'text-teal-600 border-teal-200 hover:bg-teal-600 hover:text-white hover:border-teal-600', card: 'border-teal-100 bg-teal-50/30 hover:bg-teal-50 hover:border-teal-300' },
 };
 
 export default function TankCertificateTab({ tankId, onClose, onNext }) {
@@ -104,6 +108,7 @@ export default function TankCertificateTab({ tankId, onClose, onNext }) {
           { label: 'Inspection Agency', value: certificate.inspection_agency, dot: 'bg-purple-500' },
           { label: '2.5Y Inspection', value: certificate.insp_2_5y_date, dot: 'bg-orange-500' },
           { label: 'Next Inspection', value: certificate.next_insp_date, dot: 'bg-red-500' },
+          { label: 'Remarks', value: certificate.remarks, dot: 'bg-teal-500' },
         ].map(({ label, value, dot }) => (
           <div key={label} className="space-y-1 p-4 bg-white border border-gray-100 rounded-xl shadow-sm hover:shadow-md transition-shadow">
             <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{label}</label>
@@ -132,8 +137,8 @@ export default function TankCertificateTab({ tankId, onClose, onNext }) {
               <div
                 key={field}
                 className={`relative group flex flex-col rounded-2xl border-2 transition-all duration-300 overflow-hidden ${hasFile
-                    ? `${c.card} cursor-pointer shadow-sm hover:shadow-lg hover:-translate-y-1`
-                    : 'border-gray-100 bg-gray-50/50 opacity-60 border-dashed'
+                  ? `${c.card} cursor-pointer shadow-sm hover:shadow-lg hover:-translate-y-1`
+                  : 'border-gray-100 bg-gray-50/50 opacity-60 border-dashed'
                   }`}
               >
                 {/* Label + icon */}

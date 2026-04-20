@@ -8,7 +8,7 @@ import GeneratePPTPage from './pages/GeneratePPTPage';
 import TankCodeMasterPage from './pages/TankCodeMasterPage';
 import CertificatesMasterPage from './pages/CertificatesMasterPage';
 import DrawingsMasterPage from './pages/DrawingsMasterPage';
-import ValveShellMasterPage from './pages/ValveShellMasterPage';
+import TankframeAndOuterShellPage from './pages/Tankframe&Outershell';
 import LoginPage from './pages/LoginPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import InspectionReportPage from './pages/InspectionReportPage';
@@ -122,9 +122,9 @@ export default function App() {
           <Route path="/masters/drawings" element={<DrawingsMasterPage mode="list" />} />
           <Route path="/masters/drawings/add" element={<DrawingsMasterPage mode="add" />} />
           <Route path="/masters/drawings/edit/:id" element={<DrawingsMasterPage mode="edit" />} />
-          <Route path="/masters/valve-shell" element={<ValveShellMasterPage mode="list" />} />
-          <Route path="/masters/valve-shell/add" element={<ValveShellMasterPage mode="add" />} />
-          <Route path="/masters/valve-shell/edit/:id" element={<ValveShellMasterPage mode="edit" />} />
+          <Route path="/masters/tank-frame" element={<TankframeAndOuterShellPage mode="list" />} />
+          <Route path="/masters/tank-frame/add" element={<TankframeAndOuterShellPage mode="add" />} />
+          <Route path="/masters/tank-frame/edit/:id" element={<TankframeAndOuterShellPage mode="edit" />} />
           <Route path="/change-password" element={<ChangePasswordPage />} />
           <Route path="/inspection/*" element={<InspectionReportPage />} />
           <Route path="/logout" element={<LogoutHandler onLogout={handleLogout} />} />

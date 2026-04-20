@@ -70,7 +70,7 @@ def init_seed_data(db: Session):
         
     try:
         from app.models.mawp_master_model import MawpMaster
-        mawp_values = ["21.4 bar", "22.0 bar", "24.0 bar"]
+        mawp_values = ["21.4 bar", "22.0 bar", "24.0 bar","10.0 bar","16.0 bar","18.0 bar","20.0 bar"]
         MawpMaster.__table__.create(db.get_bind(), checkfirst=True)
         for m in mawp_values:
             if not db.query(MawpMaster).filter_by(mawp_value=m).first():

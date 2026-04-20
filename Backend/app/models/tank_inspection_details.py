@@ -31,6 +31,7 @@ class TankInspectionDetails(Base):
     safety_valve_size_id = Column(Integer, nullable=True, index=True)
     # Store next inspection as YYYY/MM (string) to accept year/month input format
     pi_next_inspection_date = Column(String(7))
+    product_id = Column(Integer, index=True)
     notes = Column(Text)
     vacuum_reading = Column(String(50), nullable=True)
     vacuum_uom = Column(String(20), nullable=True)

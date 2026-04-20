@@ -158,6 +158,7 @@ export default function TankManagementPage() {
         onClose={handleCloseModal}
         onSaveSuccess={handleSaveSuccess}
         tankId={editingTankId}
+        tanks={tanks}
       />
 
       <div className="flex flex-col bg-gray-50 font-sans min-h-max min-w-max">

@@ -74,7 +74,7 @@ def get_all_masters(db: Session = Depends(get_db)):
             for row in db.query(OwnershipMaster).all()
         ],
         "products": [
-            {"id": row.id, "name": row.product_name}
+            {"id": row.id, "name": row.product_name, "un_code_id": row.un_code_id}
             for row in db.query(ProductMaster).all()
         ],
         "safety_valve_brands": [

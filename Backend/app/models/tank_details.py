@@ -32,8 +32,11 @@ class TankDetails(Base):
     evacuation_valve = Column(String(100), nullable=True)
     product_id = Column(Integer, index=True)
     safety_valve_brand_id = Column(Integer, index=True)
+    pid_id = Column(Integer, index=True, nullable=True)
+    ga_id = Column(Integer, index=True, nullable=True)
     tank_number_image_path = Column(String(255), nullable=True)
     remark = Column(Text, nullable=True)
+    remark2 = Column(Text, nullable=True)
     ownership = Column(String(100), nullable=True)  # Ownership name from ownership_master
     created_by = Column(String(100), nullable=False)
     updated_by = Column(String(100), nullable=False)

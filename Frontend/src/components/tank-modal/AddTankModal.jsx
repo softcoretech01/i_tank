@@ -7,10 +7,10 @@ import TankCertificateTab from './TankCertificateTab';
 import TankDrawingsTab from './TankDrawingsTab';
 import TankValveTab from './TankValveTab';
 import TankGaugeTab from './TankGaugeTab';
-import TankValveAndShellTab from './TankValveAndShellTab';
+import TankframeAndOuterShellTab from './Tankframe&outershelltab';
 import TankOtherImagesTab from './TankOtherImagesTab';
 
-export default function AddTankModal({ show, onClose, onSaveSuccess, tankId }) {
+export default function AddTankModal({ show, onClose, onSaveSuccess, tankId, tanks }) {
     const [searchParams, setSearchParams] = useSearchParams();
 
     // Controlled by URL now
@@ -24,7 +24,7 @@ export default function AddTankModal({ show, onClose, onSaveSuccess, tankId }) {
     const isEditMode = !!currentTankId;
     const title = isEditMode ? 'Edit Tank' : 'Add New Tank';
 
-    const tabOrder = ['tank', 'certificate', 'drawing', 'valve', 'gauge', 'valve_shell', 'others'];
+    const tabOrder = ['tank', 'certificate', 'drawing', 'valve', 'gauge', 'tank_frame', 'others'];
 
     // Update URL to change tab (Pushes to History)
     const handleTabChange = (tab) => {
@@ -101,6 +101,7 @@ export default function AddTankModal({ show, onClose, onSaveSuccess, tankId }) {
                             onClose={onClose}
                             onSaveSuccess={handleNextStep}
                             tankId={currentTankId}
+                            existingTanks={tanks}
                         />
                     )}
 
@@ -136,8 +137,8 @@ export default function AddTankModal({ show, onClose, onSaveSuccess, tankId }) {
                         />
                     )}
 
-                    {activeTab === 'valve_shell' && (
-                        <TankValveAndShellTab
+                    {activeTab === 'tank_frame' && (
+                        <TankframeAndOuterShellTab
                             tankId={currentTankId}
                             onClose={onClose}
                             onNext={handleNextStep}

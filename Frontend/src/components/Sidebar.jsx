@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Droplet, LayoutList, FileText, Lock, LogOut, ChevronLeft, ChevronRight, ChevronDown, Layers, BookOpen, ShieldCheck, Wrench, BarChart2, Archive, Code2, Image } from 'lucide-react';
 
@@ -23,7 +23,13 @@ const NavItem = ({ icon: Icon, text, active, onClick, collapsed, className }) =>
 export default function Sidebar({ collapsed, setCollapsed, webAccess }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [mastersOpen, setMastersOpen] = useState(false);
+  const [mastersOpen, setMastersOpen] = useState(() => location.pathname.startsWith('/masters'));
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/masters')) {
+      setMastersOpen(true);
+    }
+  }, [location.pathname]);
 
   const allowedScreens = useMemo(() => {
     return webAccess
@@ -46,9 +52,9 @@ export default function Sidebar({ collapsed, setCollapsed, webAccess }) {
   const mastersItems = [
     { screen: 'Tank Code/ISO Code', text: 'Tank Code/ISO Code', path: '/masters/tank-code', icon: Code2 },
     { screen: 'Regulations', text: 'Regulations', path: '/masters/regulations', icon: BookOpen },
-    { screen: 'Drawings', text: 'Drawings', path: '/masters/drawings', icon: Image },
+    { screen: 'P&ID Drawings', text: 'P&ID Drawings', path: '/masters/drawings', icon: Image },
     { screen: 'Certificates', text: 'Certificates', path: '/masters/certificates', icon: ShieldCheck },
-    { screen: 'Valve & Shell', text: 'Valve & Shell', path: '/masters/valve-shell', icon: Wrench },
+    { screen: 'Tank Frame & Outer Shell', text: 'Tank Frame', path: '/masters/tank-frame', icon: Wrench },
   ];
 
   const handleNavigation = (path) => {

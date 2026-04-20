@@ -15,14 +15,14 @@ const initialState = {
   date_mfg: '',
   pv_code: [],
   tank_code: '',
-  un_code: [],
+  un_code: '',
   capacity_l: '',
   mawp: '',
   design_temperature: '',
   tare_weight_kg: '',
   mgw_kg: '',
   mpl_kg: '',
-  size: '',
+  size: '6058 x 2438 x 2591 mm',
   pump_type: '',
   vesmat: '',
   gross_kg: '',
@@ -38,9 +38,10 @@ const initialState = {
   regulations: [],
   product_id: '',
   safety_valve_brand_id: '',
+  remark2: '',
 };
 
-export default function TankDetailsTab({ onClose, onSaveSuccess, tankId }) {
+export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existingTanks }) {
   const [formData, setFormData] = useState(initialState);
   const [viewingImage, setViewingImage] = useState(null);
 
@@ -102,8 +103,8 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId }) {
         const masterRegs = await getMasterRegulations();
         if (data) {
           // backend uses success_resp which envelopes data in a 'data' field
-          const regsList = (masterRegs?.data && Array.isArray(masterRegs.data)) 
-            ? masterRegs.data.filter(r => r.status !== 0) 
+          const regsList = (masterRegs?.data && Array.isArray(masterRegs.data))
+            ? masterRegs.data.filter(r => r.status !== 0)
             : [];
           setMasterData({
             ...data,
@@ -161,20 +162,19 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId }) {
           tank_code: data.tank_iso_code || '',
           initial_test_date: data.initial_test || '',
           mawp: loadedMawp,
-          size: data.size || '',
+          size: data.size || '6058 x 2438 x 2591 mm',
           pv_code: loadedStandardIds,
           un_code: (() => {
             const unSource = data.un_code || data.un_iso_code || '';
-            if (!unSource) return [];
-            return String(unSource)
-              .split(',')
-              .map((c) => {
-                const m = masterData.un_iso_code?.find(
-                  (u) => getOptValue(u).toString() === c.trim(),
-                );
-                return m ? String(m.id) : null;
-              })
-              .filter(Boolean);
+            if (!unSource) return '';
+            const codes = String(unSource).split(',').map((c) => c.trim());
+            if (codes.length === 0) return '';
+            
+            const firstCode = codes[0];
+            const m = masterData.un_iso_code?.find(
+              (u) => getOptValue(u).toString() === firstCode,
+            );
+            return m ? String(m.id) : '';
           })(),
           mpl_kg: (() => {
             const mgw = parseFloat(data.mgw_kg);
@@ -187,6 +187,7 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId }) {
           regulations: data.regulations || [],
           product_id: data.product_id || '',
           safety_valve_brand_id: data.safety_valve_brand_id || '',
+          remark2: data.remark2 || '',
         });
       } catch (err) {
         console.error('Failed to fetch tank data', err);
@@ -211,14 +212,40 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId }) {
         name === 'tare_weight_kg' ? parseFloat(value) : parseFloat(formData.tare_weight_kg);
       if (!isNaN(mgw) && !isNaN(tare)) newFormData.mpl_kg = (mgw - tare).toString();
     }
+    if (name === 'un_code') {
+      const unCodeId = value;
+      let productId = '';
+      if (unCodeId) {
+        const product = masterData.products?.find(
+          (p) => String(p.un_code_id) === String(unCodeId)
+        );
+        if (product) {
+          productId = String(product.id);
+        }
+      }
+      newFormData.product_id = productId;
+    }
+
     setFormData(newFormData);
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }));
   };
 
-  const handleMultiChange = (name, newValues) => {
-    setFormData((prev) => ({ ...prev, [name]: newValues }));
-    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }));
+  const handleTankNumberBlur = () => {
+    const val = formData.tank_number?.trim();
+    if (!val || !existingTanks) return;
+
+    // Check if this tank number exists in other records
+    const duplicate = existingTanks.find(t =>
+      t.tank_number?.toLowerCase() === val.toLowerCase() && t.id !== tankId
+    );
+
+    if (duplicate) {
+      alert(`The tank number "${val}" already exists!`);
+      setErrors(prev => ({ ...prev, tank_number: 'This tank already exists.' }));
+    }
   };
+
+
 
   const formatDateForInput = (dateString) => {
     if (!dateString) return '';
@@ -302,13 +329,11 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId }) {
       payload.standard = Array.isArray(formData.pv_code)
         ? formData.pv_code.map((v) => parseInt(v, 10))
         : formData.pv_code;
-      payload.un_code = Array.isArray(formData.un_code)
-        ? formData.un_code.map((v) => parseInt(v, 10))
-        : formData.un_code;
+      payload.un_code = formData.un_code ? [parseInt(formData.un_code, 10)] : [];
       payload.regulations = Array.isArray(formData.regulations)
         ? formData.regulations.map((v) => parseInt(v, 10))
         : formData.regulations;
-      
+
       payload.product_id = formData.product_id ? parseInt(formData.product_id, 10) : null;
       payload.safety_valve_brand_id = formData.safety_valve_brand_id ? parseInt(formData.safety_valve_brand_id, 10) : null;
 
@@ -395,6 +420,7 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId }) {
               name="tank_number"
               value={safeValue(formData.tank_number)}
               onChange={handleChange}
+              onBlur={handleTankNumberBlur}
               className={`${inputClass} ${errors.tank_number ? errorClass : ''}`}
             />
             {errors.tank_number && (
@@ -503,37 +529,37 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId }) {
             <label className="mb-1 text-sm font-medium text-gray-700">
               UN Code <span className="text-red-500">*</span>
             </label>
-            <MultiSelect
-              options={masterData.un_iso_code?.map((opt) => ({
-                label: opt.code || getOptLabel(opt),
-                value: String(opt.id),
-              }))}
-              height="h-24"
-              value={formData.un_code}
-              onChange={(val) => handleMultiChange('un_code', val)}
-              className={errors.un_code ? 'border-red-500 focus:ring-red-500' : ''}
-            />
+            <select
+              name="un_code"
+              value={safeValue(formData.un_code)}
+              onChange={handleChange}
+              className={`${inputClass} ${errors.un_code ? errorClass : ''}`}
+            >
+              <option value="">-- Select UN Code --</option>
+              {masterData.un_iso_code?.map((opt) => (
+                <option key={opt.id} value={String(opt.id)}>
+                  {opt.code || getOptLabel(opt)}
+                </option>
+              ))}
+            </select>
             {errors.un_code && <p className="text-xs text-red-500 mt-1">{errors.un_code}</p>}
           </div>
 
-          {/* Product Dropdown */}
+          {/* Product (Auto-filled from UN Code) */}
           <div className="flex flex-col">
             <label className="mb-1 text-sm font-medium text-gray-700">
               Product
             </label>
-            <select
-              name="product_id"
-              value={safeValue(formData.product_id)}
-              onChange={handleChange}
-              className={inputClass}
-            >
-              <option value="">-- Select Product --</option>
-              {masterData.products?.map((opt, idx) => (
-                <option key={idx} value={opt.id}>
-                  {opt.name}
-                </option>
-              ))}
-            </select>
+            <input
+              type="text"
+              value={(() => {
+                const prod = masterData.products?.find(p => String(p.id) === String(formData.product_id));
+                return prod ? prod.name : '';
+              })()}
+              readOnly
+              className={`${inputClass} bg-gray-100 cursor-not-allowed`}
+              placeholder="Auto-filled from UN Code"
+            />
           </div>
 
           {/* Safety Valve Brand Dropdown */}
@@ -740,10 +766,9 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId }) {
             <input
               type="text"
               name="size"
-              value={safeValue(formData.size)}
-              onChange={handleChange}
-              className={`${inputClass} ${errors.size ? errorClass : ''}`}
-              placeholder="e.g. 45 Feet* 8 Feet"
+              value={safeValue(formData.size) || '6058 x 2438 x 2591 mm'}
+              readOnly
+              className={`${inputClass} bg-gray-100 cursor-not-allowed ${errors.size ? errorClass : ''}`}
             />
             {errors.size && <p className="text-xs text-red-500 mt-1">{errors.size}</p>}
           </div>
@@ -785,7 +810,7 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId }) {
           </div>
 
           {/* Tank Number Image */}
-          <div className="flex flex-col col-span-1 sm:col-span-2 lg:col-span-4">
+          <div className="flex flex-col col-span-1 sm:col-span-2 lg:col-span-2">
             <label className="mb-1 text-sm font-medium text-gray-700">Tank Number Image</label>
             <div className="flex items-center gap-4">
               <input
@@ -810,6 +835,19 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId }) {
                 </Button>
               )}
             </div>
+          </div>
+
+          {/* Remarks 2 */}
+          <div className="flex flex-col col-span-1 sm:col-span-2 lg:col-span-2">
+            <label className="mb-1 text-sm font-medium text-gray-700">Remarks 2</label>
+            <input
+              type="text"
+              name="remark2"
+              value={safeValue(formData.remark2)}
+              onChange={handleChange}
+              className={inputClass}
+              placeholder="Second remarks field"
+            />
           </div>
 
           {/* Select Regulations */}

@@ -13,6 +13,10 @@ import logging
 
 from app.utils.upload_utils import save_uploaded_file, delete_file_if_exists
 from app.utils.s3_utils import to_cdn_url
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill
+from io import BytesIO
+from fastapi.responses import StreamingResponse
 import jwt
 
 JWT_SECRET = os.getenv("JWT_SECRET", "change_this_in_production")
@@ -47,23 +51,24 @@ UPLOAD_ROOT = os.getenv(
 
 CERTIFICATE_TYPE = "certificates"
 
-# Max PDF size: 2 MB
-MAX_PDF_SIZE = 2 * 1024 * 1024
-ALLOWED_PDF_TYPES = {"application/pdf"}
+# Max certificate size: 2 MB
+MAX_certificate_SIZE = 2 * 1024 * 1024
+ALLOWED_certificate_TYPES = {"application/pdf"}
 
 
 # --- HELPERS ---
 
-def validate_pdf(upload_file: UploadFile, field_label: str):
+def validate_certificate(upload_file: UploadFile, field_label: str):
     """Validate that file is PDF and ≤ 2 MB."""
     content_type = getattr(upload_file, "content_type", "") or ""
-    if content_type.lower() not in ALLOWED_PDF_TYPES:
+    # Be lenient: allow octet-stream too (some browsers send this for PDFs)
+    if content_type.lower() not in ALLOWED_certificate_TYPES and "pdf" not in content_type.lower():
         raise HTTPException(
             status_code=400,
             detail=f"{field_label}: Only PDF files are allowed (got '{content_type}')."
         )
     contents = upload_file.file.read()
-    if len(contents) > MAX_PDF_SIZE:
+    if len(contents) > MAX_certificate_SIZE:
         raise HTTPException(
             status_code=400,
             detail=f"{field_label}: File size exceeds 2 MB ({len(contents) // 1024} KB)."
@@ -98,6 +103,23 @@ def _normalize_date_str(s: Optional[str]) -> Optional[str]:
     return None
 
 
+def calculate_next_inspection_date(insp_date_str: str) -> Optional[str]:
+    """Add 30 months (2.5 years) to a YYYY/MM or YYYY-MM string."""
+    norm = _normalize_date_str(insp_date_str)
+    if not norm:
+        return None
+    try:
+        # Normalize returns YYYY/MM
+        year, month = map(int, norm.split('/'))
+        # Add 30 months
+        total_months = year * 12 + (month - 1) + 30
+        new_year = total_months // 12
+        new_month = (total_months % 12) + 1
+        return f"{new_year}/{new_month:02d}"
+    except Exception:
+        return None
+
+
 def to_url(raw):
     if not raw:
         return ""
@@ -114,16 +136,22 @@ def serialize_certificate(cert):
         "next_insp_date": safe_serialize_date(cert.next_insp_date),
         "year_of_manufacturing": getattr(cert, "year_of_manufacturing", "") or "",
         "inspection_agency": getattr(cert, "inspection_agency", "") or "",
-        "status": getattr(cert, "status", 1),
-        # PDF file URLs
-        "periodic_inspection_pdf_path": to_url(getattr(cert, "periodic_inspection_pdf_path", None)),
-        "periodic_inspection_pdf_name": getattr(cert, "periodic_inspection_pdf_name", None),
-        "next_insp_pdf_path": to_url(getattr(cert, "next_insp_pdf_path", None)),
-        "next_insp_pdf_name": getattr(cert, "next_insp_pdf_name", None),
-        "new_certificate_file": to_url(getattr(cert, "new_certificate_file", None)),
-        "new_certificate_file_name": getattr(cert, "new_certificate_file_name", None),
-        "old_certificate_file": to_url(getattr(cert, "old_certificate_file", None)),
-        "old_certificate_file_name": getattr(cert, "old_certificate_file_name", None),
+        "status": 0 if getattr(cert, "status", 1) == 0 else 1,
+        "remarks": getattr(cert, "remarks", "") or "",
+        "archives": getattr(cert, "archives", 0) or 0,
+        # certificate file URLs (6 slots)
+        "initial_certificate_path": to_url(getattr(cert, "initial_certificate_path", None)),
+        "initial_certificate_name": getattr(cert, "initial_certificate_name", None),
+        "certificate1_path": to_url(getattr(cert, "certificate1_path", None)),
+        "certificate1_name": getattr(cert, "certificate1_name", None),
+        "certificate2_path": to_url(getattr(cert, "certificate2_path", None)),
+        "certificate2_name": getattr(cert, "certificate2_name", None),
+        "certificate3_path": to_url(getattr(cert, "certificate3_path", None)),
+        "certificate3_name": getattr(cert, "certificate3_name", None),
+        "certificate4_path": to_url(getattr(cert, "certificate4_path", None)),
+        "certificate4_name": getattr(cert, "certificate4_name", None),
+        "certificate5_path": to_url(getattr(cert, "certificate5_path", None)),
+        "certificate5_name": getattr(cert, "certificate5_name", None),
         "created_by": cert.created_by,
         "updated_by": getattr(cert, "updated_by", None),
         "created_at": cert.created_at.isoformat() if cert.created_at else None,
@@ -131,11 +159,21 @@ def serialize_certificate(cert):
     }
 
 
-def save_pdf(upload_file: Optional[UploadFile], label: str, image_type: str, tank_number: str) -> tuple:
-    """Validate, save a PDF file and return (path, filename). Returns (None, None) if no file."""
+def save_certificate(upload_file: Optional[UploadFile], label: str, image_type: str, tank_number: str) -> tuple:
+    """Validate, save a certificate file and return (path, filename). Returns (None, None) if no file."""
     if not upload_file or not upload_file.filename:
         return None, None
-    validate_pdf(upload_file, label)
+    validate_certificate(upload_file, label)
+
+    # Filename must contain the numeric part of the tank number
+    numeric_tank = re.sub(r'\D', '', tank_number)
+    numeric_file = re.sub(r'\D', '', upload_file.filename)
+    if numeric_tank and numeric_tank not in numeric_file:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{label}: Filename mismatch. The file name must contain the numeric part '{numeric_tank}' from tank number '{tank_number}'."
+        )
+
     path = save_uploaded_file(
         upload_file=upload_file,
         tank_number=tank_number,
@@ -145,11 +183,138 @@ def save_pdf(upload_file: Optional[UploadFile], label: str, image_type: str, tan
     return path, upload_file.filename
 
 
+def _shift_and_archive(cert, new_path: str, new_name: str):
+    """
+    Cascade shift certificates: slots 1→2→3→4→5→archive.
+    The new file occupies slot 1.  Whatever was in slot 5 is considered archived
+    and the `archives` counter is incremented.
+
+    cert5 displaced  → archives += 1  (file is deleted from storage)
+    cert4 → cert5
+    cert3 → cert4
+    cert2 → cert3
+    cert1 → cert2
+    new   → cert1
+    """
+    # If cert5 has a file, it gets pushed to archive (delete physically, increment counter)
+    if cert.certificate5_path:
+        delete_file_if_exists(UPLOAD_ROOT, cert.certificate5_path)
+        cert.archives = int(cert.archives or 0) + 1
+
+    # Shift 4 → 5
+    cert.certificate5_path = cert.certificate4_path
+    cert.certificate5_name = cert.certificate4_name
+
+    # Shift 3 → 4
+    cert.certificate4_path = cert.certificate3_path
+    cert.certificate4_name = cert.certificate3_name
+
+    # Shift 2 → 3
+    cert.certificate3_path = cert.certificate2_path
+    cert.certificate3_name = cert.certificate2_name
+
+    # Shift 1 → 2
+    cert.certificate2_path = cert.certificate1_path
+    cert.certificate2_name = cert.certificate1_name
+
+    # New file → slot 1
+    cert.certificate1_path = new_path
+    cert.certificate1_name = new_name
+
+
 # -------- LIST ALL --------
 @router.get("/")
 def get_all_certificates(db: Session = Depends(get_db)):
     certs = db.query(TankCertificate).all()
-    return [serialize_certificate(c) for c in certs]
+    return [serialize_certificate(c) for c in certs]# -------- EXPORT TO EXCEL --------
+@router.get("/export-to-excel")
+def export_certificates_to_excel(
+    nearing: Optional[bool] = False,
+    db: Session = Depends(get_db)
+):
+    results = db.query(TankCertificate).all()
+    
+    if nearing:
+        filtered = []
+        today = date_type.today()
+        # Today's reference: total months from year 0
+        current_total_months = today.year * 12 + (today.month - 1)
+        
+        for cert in results:
+            if not cert.next_insp_date:
+                continue
+            try:
+                # Format is YYYY/MM
+                y_str, m_str = cert.next_insp_date.split('/')
+                y, m = int(y_str), int(m_str)
+                cert_total_months = y * 12 + (m - 1)
+                
+                diff = cert_total_months - current_total_months
+                # Nearing if it's within 6 months (including already expired/past)
+                if diff <= 6:
+                    filtered.append(cert)
+            except Exception:
+                continue
+        results = filtered
+
+    if not results:
+        raise HTTPException(status_code=404, detail="No certificate records found to export")
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Certificates"
+
+    headers = [
+        "ID", "Tank Number", "Certificate Number", "Inspection Agency",
+        "2.5Y Insp Date", "Next Insp Date", "Status", "Remarks", "Archives"
+    ]
+
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    header_alignment = Alignment(horizontal="center", vertical="center")
+
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_num, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_alignment
+
+    for row_num, cert in enumerate(results, 2):
+        ws.cell(row=row_num, column=1, value=cert.id)
+        ws.cell(row=row_num, column=2, value=cert.tank_number)
+        ws.cell(row=row_num, column=3, value=cert.certificate_number)
+        ws.cell(row=row_num, column=4, value=cert.inspection_agency)
+        ws.cell(row=row_num, column=5, value=safe_serialize_date(cert.insp_2_5y_date))
+        ws.cell(row=row_num, column=6, value=safe_serialize_date(cert.next_insp_date))
+        ws.cell(row=row_num, column=7, value="Active" if getattr(cert, "status", 1) == 1 else "Inactive")
+        ws.cell(row=row_num, column=8, value=cert.remarks)
+        ws.cell(row=row_num, column=9, value=cert.archives or 0)
+
+    # Auto-adjust column widths
+    for col in ws.columns:
+        max_length = 0
+        column = col[0].column_letter
+        for cell in col:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        ws.column_dimensions[column].width = max_length + 2
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    prefix = "nearing_6m_" if nearing else ""
+    filename = f"{prefix}certificates_export_{timestamp}.xlsx"
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 # -------- READ BY TANK ID --------
@@ -190,11 +355,14 @@ def create_tank_certificate(
     insp_2_5y_date: Optional[str] = Form(None),
     next_insp_date: Optional[str] = Form(None),
     inspection_agency_id: Optional[int] = Form(None),
-    # 4 PDF uploads
-    periodic_inspection_pdf: Optional[UploadFile] = File(None),
-    next_insp_pdf: Optional[UploadFile] = File(None),
-    new_certificate_file: Optional[UploadFile] = File(None),
-    old_certificate_file: Optional[UploadFile] = File(None),
+    # 6 certificate uploads
+    initial_certificate: Optional[UploadFile] = File(None),
+    certificate1: Optional[UploadFile] = File(None),
+    certificate2: Optional[UploadFile] = File(None),
+    certificate3: Optional[UploadFile] = File(None),
+    certificate4: Optional[UploadFile] = File(None),
+    certificate5: Optional[UploadFile] = File(None),
+    remarks: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(None),
 ):
@@ -215,6 +383,10 @@ def create_tank_certificate(
         )
 
     tank_number = tank_record.tank_number
+
+    # Auto-calculate next_insp_date if missing but insp_2_5y_date exists
+    if not next_insp_date and insp_2_5y_date:
+        next_insp_date = calculate_next_inspection_date(insp_2_5y_date)
 
     if not certificate_number or not certificate_number.strip():
         ts = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -242,12 +414,14 @@ def create_tank_certificate(
     except Exception:
         pass
 
-    # Save PDFs
+    # Save certificates (on create, all slots including initial are accepted)
     try:
-        p_path, p_name = save_pdf(periodic_inspection_pdf, "Periodic Inspection PDF", "cert_periodic", tank_number)
-        n_path, n_name = save_pdf(next_insp_pdf, "Next Inspection PDF", "cert_next_insp", tank_number)
-        nc_path, nc_name = save_pdf(new_certificate_file, "New Certificate PDF", "cert_new", tank_number)
-        oc_path, oc_name = save_pdf(old_certificate_file, "Old Certificate PDF", "cert_old", tank_number)
+        ic_path, ic_name = save_certificate(initial_certificate, "Initial Certificate", "cert_initial", tank_number)
+        p1_path, p1_name = save_certificate(certificate1, "Certificate 1", "cert_certificate1", tank_number)
+        p2_path, p2_name = save_certificate(certificate2, "Certificate 2", "cert_certificate2", tank_number)
+        p3_path, p3_name = save_certificate(certificate3, "Certificate 3", "cert_certificate3", tank_number)
+        p4_path, p4_name = save_certificate(certificate4, "Certificate 4", "cert_certificate4", tank_number)
+        p5_path, p5_name = save_certificate(certificate5, "Certificate 5", "cert_certificate5", tank_number)
     except HTTPException:
         raise
     except Exception as e:
@@ -262,15 +436,21 @@ def create_tank_certificate(
             next_insp_date=_normalize_date_str(next_insp_date),
             inspection_agency=inspection_agency_name,
             year_of_manufacturing=year_of_manufacturing,
-            periodic_inspection_pdf_path=p_path,
-            periodic_inspection_pdf_name=p_name,
-            next_insp_pdf_path=n_path,
-            next_insp_pdf_name=n_name,
-            new_certificate_file=nc_path,
-            new_certificate_file_name=nc_name,
-            old_certificate_file=oc_path,
-            old_certificate_file_name=oc_name,
+            initial_certificate_path=ic_path,
+            initial_certificate_name=ic_name,
+            certificate1_path=p1_path,
+            certificate1_name=p1_name,
+            certificate2_path=p2_path,
+            certificate2_name=p2_name,
+            certificate3_path=p3_path,
+            certificate3_name=p3_name,
+            certificate4_path=p4_path,
+            certificate4_name=p4_name,
+            certificate5_path=p5_path,
+            certificate5_name=p5_name,
+            archives=0,
             status=1,
+            remarks=clean_form_data(remarks),
             created_by=emp_id,
             updated_by=emp_id,
         )
@@ -309,19 +489,33 @@ def update_tank_certificate(
     next_insp_date: Optional[str] = Form(None),
     inspection_agency_id: Optional[int] = Form(None),
     status: Optional[int] = Form(None),
-    # 4 PDF uploads
-    periodic_inspection_pdf: Optional[UploadFile] = File(None),
-    next_insp_pdf: Optional[UploadFile] = File(None),
-    new_certificate_file: Optional[UploadFile] = File(None),
-    old_certificate_file: Optional[UploadFile] = File(None),
-    # Clear flags — send '1' to remove an existing file
-    clear_periodic_inspection_pdf: Optional[str] = Form(None),
-    clear_next_insp_pdf: Optional[str] = Form(None),
-    clear_new_certificate_file: Optional[str] = Form(None),
-    clear_old_certificate_file: Optional[str] = Form(None),
+    # certificate1 is the ONLY replaceable slot — triggers the cascade shift
+    initial_certificate: Optional[UploadFile] = File(None),
+    remove_initial_certificate: Optional[bool] = Form(False),
+    certificate1: Optional[UploadFile] = File(None),
+    remove_certificate1: Optional[bool] = Form(False),
+    certificate2: Optional[UploadFile] = File(None),
+    remove_certificate2: Optional[bool] = Form(False),
+    certificate3: Optional[UploadFile] = File(None),
+    remove_certificate3: Optional[bool] = Form(False),
+    certificate4: Optional[UploadFile] = File(None),
+    remove_certificate4: Optional[bool] = Form(False),
+    certificate5: Optional[UploadFile] = File(None),
+    remove_certificate5: Optional[bool] = Form(False),
+    remarks: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(None),
 ):
+    """
+    Update a tank certificate record.
+
+    Rules:
+    - initial_certificate: immutable after first upload — cannot be replaced or removed via API.
+    - certificate1: uploading a new file triggers cascade shift:
+        existing cert1 → cert2, cert2 → cert3, cert3 → cert4, cert4 → cert5,
+        cert5 → archived (physically deleted, archives counter +1).
+    - certificate2–5 are read-only; they are populated automatically by the shift.
+    """
     cert = db.query(TankCertificate).filter(TankCertificate.id == cert_id).first()
     if not cert:
         raise HTTPException(status_code=404, detail="Tank certificate not found")
@@ -337,6 +531,9 @@ def update_tank_certificate(
         n = _normalize_date_str(insp_2_5y_date)
         if n:
             cert.insp_2_5y_date = n
+            # If next_insp_date not provided, auto-update it
+            if next_insp_date is None:
+                cert.next_insp_date = calculate_next_inspection_date(n)
     if next_insp_date is not None:
         n = _normalize_date_str(next_insp_date)
         if n:
@@ -355,61 +552,69 @@ def update_tank_certificate(
         except Exception:
             pass
 
-    # Handle PDF updates
+    if remarks is not None:
+        cert.remarks = clean_form_data(remarks)
+
     try:
-        # --- Clear requests (remove existing file, null DB field) ---
-        if clear_periodic_inspection_pdf == '1':
-            if cert.periodic_inspection_pdf_path:
-                delete_file_if_exists(UPLOAD_ROOT, cert.periodic_inspection_pdf_path)
-            cert.periodic_inspection_pdf_path = None
-            cert.periodic_inspection_pdf_name = None
+        # Handle initial_certificate
+        if remove_initial_certificate:
+            if initial_certificate and initial_certificate.filename:
+                new_path, new_name = save_certificate(initial_certificate, "Initial Certificate", "cert_initial", tank_number)
+                if cert.initial_certificate_path: delete_file_if_exists(UPLOAD_ROOT, cert.initial_certificate_path)
+                cert.initial_certificate_path, cert.initial_certificate_name = new_path, new_name
+            else:
+                if cert.initial_certificate_path: delete_file_if_exists(UPLOAD_ROOT, cert.initial_certificate_path)
+                cert.initial_certificate_path, cert.initial_certificate_name = None, None
+        elif initial_certificate and initial_certificate.filename:
+            new_path, new_name = save_certificate(initial_certificate, "Initial Certificate", "cert_initial", tank_number)
+            if cert.initial_certificate_path: delete_file_if_exists(UPLOAD_ROOT, cert.initial_certificate_path)
+            cert.initial_certificate_path, cert.initial_certificate_name = new_path, new_name
 
-        if clear_next_insp_pdf == '1':
-            if cert.next_insp_pdf_path:
-                delete_file_if_exists(UPLOAD_ROOT, cert.next_insp_pdf_path)
-            cert.next_insp_pdf_path = None
-            cert.next_insp_pdf_name = None
+        # Handle certificate1 replacement with cascade shift
+        if remove_certificate1:
+            if certificate1 and certificate1.filename:
+                # Replace WITHOUT cascade shift
+                new_path, new_name = save_certificate(certificate1, "Certificate 1", "cert_certificate1", tank_number)
+                if cert.certificate1_path:
+                    delete_file_if_exists(UPLOAD_ROOT, cert.certificate1_path)
+                cert.certificate1_path = new_path
+                cert.certificate1_name = new_name
+            else:
+                # Remove WITHOUT cascade shift
+                if cert.certificate1_path:
+                    delete_file_if_exists(UPLOAD_ROOT, cert.certificate1_path)
+                cert.certificate1_path = None
+                cert.certificate1_name = None
+        elif certificate1 and certificate1.filename:
+            # Normal replacement WITH cascade shift
+            new_path, new_name = save_certificate(certificate1, "Certificate 1", "cert_certificate1", tank_number)
+            _shift_and_archive(cert, new_path, new_name)
 
-        if clear_new_certificate_file == '1':
-            if cert.new_certificate_file:
-                delete_file_if_exists(UPLOAD_ROOT, cert.new_certificate_file)
-            cert.new_certificate_file = None
-            cert.new_certificate_file_name = None
+        # Handle certificate2..5
+        for idx, file_obj, remove_flag in [
+            (2, certificate2, remove_certificate2),
+            (3, certificate3, remove_certificate3),
+            (4, certificate4, remove_certificate4),
+            (5, certificate5, remove_certificate5),
+        ]:
+            path_attr = f"certificate{idx}_path"
+            name_attr = f"certificate{idx}_name"
 
-        if clear_old_certificate_file == '1':
-            if cert.old_certificate_file:
-                delete_file_if_exists(UPLOAD_ROOT, cert.old_certificate_file)
-            cert.old_certificate_file = None
-            cert.old_certificate_file_name = None
-
-        # --- New file uploads (replace) ---
-        if periodic_inspection_pdf and periodic_inspection_pdf.filename:
-            if cert.periodic_inspection_pdf_path:
-                delete_file_if_exists(UPLOAD_ROOT, cert.periodic_inspection_pdf_path)
-            p, n = save_pdf(periodic_inspection_pdf, "Periodic Inspection PDF", "cert_periodic", tank_number)
-            cert.periodic_inspection_pdf_path = p
-            cert.periodic_inspection_pdf_name = n
-
-        if next_insp_pdf and next_insp_pdf.filename:
-            if cert.next_insp_pdf_path:
-                delete_file_if_exists(UPLOAD_ROOT, cert.next_insp_pdf_path)
-            p, n = save_pdf(next_insp_pdf, "Next Inspection PDF", "cert_next_insp", tank_number)
-            cert.next_insp_pdf_path = p
-            cert.next_insp_pdf_name = n
-
-        if new_certificate_file and new_certificate_file.filename:
-            if cert.new_certificate_file:
-                delete_file_if_exists(UPLOAD_ROOT, cert.new_certificate_file)
-            p, n = save_pdf(new_certificate_file, "New Certificate PDF", "cert_new", tank_number)
-            cert.new_certificate_file = p
-            cert.new_certificate_file_name = n
-
-        if old_certificate_file and old_certificate_file.filename:
-            if cert.old_certificate_file:
-                delete_file_if_exists(UPLOAD_ROOT, cert.old_certificate_file)
-            p, n = save_pdf(old_certificate_file, "Old Certificate PDF", "cert_old", tank_number)
-            cert.old_certificate_file = p
-            cert.old_certificate_file_name = n
+            if remove_flag:
+                if file_obj and file_obj.filename:
+                    n_path, n_name = save_certificate(file_obj, f"Certificate {idx}", f"cert_certificate{idx}", tank_number)
+                    if getattr(cert, path_attr): delete_file_if_exists(UPLOAD_ROOT, getattr(cert, path_attr))
+                    setattr(cert, path_attr, n_path)
+                    setattr(cert, name_attr, n_name)
+                else:
+                    if getattr(cert, path_attr): delete_file_if_exists(UPLOAD_ROOT, getattr(cert, path_attr))
+                    setattr(cert, path_attr, None)
+                    setattr(cert, name_attr, None)
+            elif file_obj and file_obj.filename:
+                n_path, n_name = save_certificate(file_obj, f"Certificate {idx}", f"cert_certificate{idx}", tank_number)
+                if getattr(cert, path_attr): delete_file_if_exists(UPLOAD_ROOT, getattr(cert, path_attr))
+                setattr(cert, path_attr, n_path)
+                setattr(cert, name_attr, n_name)
 
     except HTTPException:
         raise
@@ -454,7 +659,7 @@ def delete_tank_certificate(
     if not cert:
         raise HTTPException(status_code=404, detail="Tank certificate not found")
 
-    for field in ["periodic_inspection_pdf_path", "next_insp_pdf_path", "new_certificate_file", "old_certificate_file"]:
+    for field in ["initial_certificate_path", "certificate1_path", "certificate2_path", "certificate3_path", "certificate4_path", "certificate5_path"]:
         p = getattr(cert, field, None)
         if p:
             delete_file_if_exists(UPLOAD_ROOT, p)

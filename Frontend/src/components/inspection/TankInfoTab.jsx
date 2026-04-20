@@ -304,10 +304,6 @@ export default function TankInfoTab({ masters, activeTanks, onSuccess, inspectio
                                         <label className="text-[10px] font-black text-white/50 uppercase tracking-wider">S/V Brand</label>
                                         <span className="text-xs font-bold text-white/90">{tankDetails.safety_valve_brand_name || 'N/A'}</span>
                                     </div>
-                                    <div className="flex justify-between items-center border-b border-white/10 pb-1">
-                                        <label className="text-[10px] font-black text-white/50 uppercase tracking-wider">Product</label>
-                                        <span className="text-xs font-bold text-white/90">{tankDetails.product_name || 'N/A'}</span>
-                                    </div>
                                 </div>
 
                                 <div className="mt-4">

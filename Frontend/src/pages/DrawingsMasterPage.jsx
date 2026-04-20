@@ -12,6 +12,7 @@ import {
   deleteDrawing
 } from '../services/tankDrawingService';
 import { getTanks } from '../services/tankService';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 
 // Max 2 MB
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
@@ -46,13 +47,20 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
   // --- Form State ---
   const [tanks, setTanks] = useState([]);
   const [formData, setFormData] = useState({
-    tank_id: '',
     pid_reference: '',
-    ga_drawing: '',
     pid_drawing: null,           // new File to upload
-    ga_drawing_file: null,       // new File to upload
+    image2_drawing_file: null,       // new File to upload
     pid_drawing_removed: false,  // user clicked X on existing
-    ga_drawing_file_removed: false,
+    image2_drawing_file_removed: false,
+    img3: null,
+    img4: null,
+    img5: null,
+    img6: null,
+    img3_removed: false,
+    img4_removed: false,
+    img5_removed: false,
+    img6_removed: false,
+    remarks: '',
   });
   const [existingData, setExistingData] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -85,7 +93,7 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
     try {
       const raw = await getTanks();
       const list = Array.isArray(raw) ? raw : (raw?.data || []);
-      setTanks(list.filter(t => t.status === 1));
+      setTanks(list.filter(t => t.status === 'active' || t.status === 1));
     } catch (err) {
       console.error("Failed to fetch tanks:", err);
     }
@@ -96,15 +104,22 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
       const all = await getAllDrawings();
       const item = all.find(d => String(d.id) === String(id));
       if (item) {
-              setExistingData(item);
+        setExistingData(item);
         setFormData({
-          tank_id: item.tank_id,
           pid_reference: item.pid_reference || '',
-          ga_drawing: item.ga_drawing || '',
           pid_drawing: null,
-          ga_drawing_file: null,
+          image2_drawing_file: null,
           pid_drawing_removed: false,
-          ga_drawing_file_removed: false,
+          image2_drawing_file_removed: false,
+          img3: null,
+          img4: null,
+          img5: null,
+          img6: null,
+          img3_removed: false,
+          img4_removed: false,
+          img5_removed: false,
+          img6_removed: false,
+          remarks: item.remarks || '',
         });
       }
     } catch (err) {
@@ -114,11 +129,14 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
 
   // --- Logic Helpers ---
   const filteredItems = useMemo(() => {
-    if (!filterTerm) return items;
-    return items.filter(item => {
-      const val = String(item[searchBy] || '').toLowerCase();
-      return val.includes(filterTerm.toLowerCase());
-    });
+    let result = Array.isArray(items) ? [...items] : [];
+    if (filterTerm) {
+      result = result.filter(item => {
+        const val = String(item[searchBy] || '').toLowerCase();
+        return val.includes(filterTerm.toLowerCase());
+      });
+    }
+    return result.sort((a, b) => (a.pid_reference || '').localeCompare(b.pid_reference || ''));
   }, [items, filterTerm, searchBy]);
 
   const handleSearch = () => setFilterTerm(searchTerm);
@@ -133,7 +151,7 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
 
     // Validate type
     if (!['image/jpeg', 'image/jpg'].includes(file.type.toLowerCase())) {
-      alert(`Only JPEG/JPG images are allowed for ${field === 'pid_drawing' ? 'P&ID Drawing' : 'GA Drawing'}.`);
+      alert(`Only JPEG/JPG images are allowed for ${field === 'pid_drawing' ? 'P&ID Drawing' : 'Image 2'}.`);
       e.target.value = '';
       return;
     }
@@ -148,23 +166,18 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!formData.tank_id) {
-      alert("Please select a Tank");
-      return;
-    }
     setIsSaving(true);
     try {
       const fd = new FormData();
-      fd.append('tank_id', formData.tank_id);
       fd.append('pid_reference', formData.pid_reference || '');
-      fd.append('ga_drawing', formData.ga_drawing || '');
+      fd.append('remarks', formData.remarks || '');
 
       // New files
       if (formData.pid_drawing) {
         fd.append('pid_drawing_file', formData.pid_drawing);
       }
-      if (formData.ga_drawing_file) {
-        fd.append('ga_drawing_file', formData.ga_drawing_file);
+      if (formData.image2_drawing_file) {
+        fd.append('image2_drawing_file', formData.image2_drawing_file);
       }
 
       // Clear flags (only in edit mode)
@@ -172,8 +185,22 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
         if (formData.pid_drawing_removed && !formData.pid_drawing) {
           fd.append('clear_pid_drawing', '1');
         }
-        if (formData.ga_drawing_file_removed && !formData.ga_drawing_file) {
-          fd.append('clear_ga_drawing_file', '1');
+        if (formData.image2_drawing_file_removed && !formData.image2_drawing_file) {
+          fd.append('clear_image2_drawing_file', '1');
+        }
+        for (let i = 3; i <= 6; i++) {
+          if (formData[`img${i}_removed`] && !formData[`img${i}`]) {
+            fd.append(`clear_img${i}`, '1');
+          }
+        }
+      }
+
+      // New files (standardized fields)
+      if (formData.pid_drawing) fd.append('pid_drawing_file', formData.pid_drawing);
+      if (formData.image2_drawing_file) fd.append('image2_drawing_file', formData.image2_drawing_file);
+      for (let i = 3; i <= 6; i++) {
+        if (formData[`img${i}`]) {
+          fd.append(`img${i}_file`, formData[`img${i}`]);
         }
       }
 
@@ -187,14 +214,15 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
       navigate('/masters/drawings');
     } catch (err) {
       console.error("Save failed:", err);
-      alert("Failed to save drawing. " + (err.response?.data?.detail || err.message));
+      alert("Failed to save drawing. " + (err.response?.data?.message || err.response?.data?.detail || err.message));
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleToggleStatus = async (item) => {
-    const newStatus = item.status === 1 ? 0 : 1;
+    const currentStatus = Number(item.status ?? 1);
+    const newStatus = currentStatus === 1 ? 0 : 1;
     try {
       const fd = new FormData();
       fd.append('status', newStatus);
@@ -296,9 +324,6 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
           <input type="file" accept=".jpg,.jpeg,image/jpeg" className="hidden"
             onChange={(e) => handleFileChange(e, field)} />
         </label>
-        {isRemoved && (
-          <p className="text-[10px] text-red-400 text-center">Will be removed on save</p>
-        )}
       </div>
     );
   };
@@ -307,12 +332,12 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
 
   if (mode === 'list') {
     return (
-      <div className="flex flex-col flex-1 p-4 bg-gray-50 h-screen overflow-hidden">
+      <div className="flex flex-col flex-1 p-2 bg-gray-50 h-screen overflow-hidden">
         <div className="bg-white rounded-lg shadow-md flex flex-col h-full border border-gray-200 overflow-hidden">
 
           {/* Header Section */}
-          <div className="p-5 border-b border-gray-100">
-            <div className="flex justify-between items-center mb-6">
+          <div className="p-3 border-b border-gray-100">
+            <div className="flex justify-between items-center mb-4">
               <h1 className="text-2xl font-bold text-[#546E7A]">Drawings Master</h1>
               <Button
                 onClick={() => navigate('/masters/drawings/add')}
@@ -332,9 +357,8 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
                 onChange={(e) => setSearchBy(e.target.value)}
                 className="h-10 px-4 border border-gray-300 rounded focus:ring-2 focus:ring-[#546E7A] focus:outline-none bg-white min-w-[150px]"
               >
-                <option value="tank_number">Tank Number</option>
                 <option value="pid_reference">P&ID Reference</option>
-                <option value="ga_drawing">GA Drawing</option>
+                <option value="remarks">Remarks</option>
               </select>
 
               <div className="relative flex-grow max-w-sm">
@@ -369,11 +393,9 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
               <thead className="sticky top-0 bg-[#455A64] text-white z-10">
                 <tr>
                   <th className="px-6 py-4 text-left font-bold uppercase text-xs tracking-wider">ID</th>
-                  <th className="px-6 py-4 text-left font-bold uppercase text-xs tracking-wider">Tank Number</th>
                   <th className="px-6 py-4 text-left font-bold uppercase text-xs tracking-wider">P&ID Reference</th>
-                  <th className="px-6 py-4 text-left font-bold uppercase text-xs tracking-wider">GA Drawing</th>
-                  <th className="px-6 py-4 text-left font-bold uppercase text-xs tracking-wider">P&ID Image</th>
-                  <th className="px-6 py-4 text-left font-bold uppercase text-xs tracking-wider">GA Image</th>
+                  <th className="px-6 py-4 text-left font-bold uppercase text-xs tracking-wider">Remarks</th>
+                  <th className="px-6 py-4 text-center font-bold uppercase text-xs tracking-wider">Images</th>
                   <th className="px-6 py-4 text-right font-bold uppercase text-xs tracking-wider w-32">Actions</th>
                 </tr>
               </thead>
@@ -386,24 +408,24 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
                   filteredItems.map((item) => (
                     <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 text-sm text-gray-500">{item.id}</td>
-                      <td className="px-6 py-4 text-sm font-medium text-gray-700">{item.tank_number}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{item.pid_reference || '-'}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{item.ga_drawing || '-'}</td>
-                      <td className="px-6 py-4 text-sm">
-                        {item.pid_drawing ? (
-                          <a href={item.pid_drawing} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-blue-500 hover:text-blue-700 font-medium">
-                            <Image className="w-4 h-4" /> View
-                          </a>
-                        ) : <span className="text-gray-300">—</span>}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        {item.ga_drawing_file ? (
-                          <a href={item.ga_drawing_file} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-blue-500 hover:text-blue-700 font-medium">
-                            <Image className="w-4 h-4" /> View
-                          </a>
-                        ) : <span className="text-gray-300">—</span>}
+                      <td className="px-6 py-4 text-sm text-gray-500 italic max-w-[120px] truncate" title={item.remarks}>{item.remarks || '-'}</td>
+                      <td className="px-6 py-4 text-center text-sm">
+                        {(() => {
+                          const count = [
+                            item.pid_drawing,
+                            item.image2_drawing_file,
+                            item.img3,
+                            item.img4,
+                            item.img5,
+                            item.img6
+                          ].filter(Boolean).length;
+                          return (
+                            <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${count > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                              <Image className="w-3 h-3" /> {count}/6
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-2 items-center">
@@ -414,7 +436,7 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
                             <Edit className="w-5 h-5" />
                           </button>
                           <StatusToggle
-                            active={item.status === 1}
+                            active={Number(item.status ?? 1) === 1}
                             onToggle={() => handleToggleStatus(item)}
                           />
                         </div>
@@ -432,11 +454,11 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
 
   // --- Add/Edit Form View ---
   return (
-    <div className="flex flex-col flex-1 p-4 bg-gray-100 h-screen overflow-hidden">
-      <div className="max-w-5xl mx-auto w-full flex flex-col h-full space-y-4">
+    <div className="flex flex-col flex-1 p-2 bg-gray-100 h-screen overflow-hidden">
+      <div className="w-full flex flex-col h-full space-y-2">
 
         {/* Header with Back Button */}
-        <div className="flex items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div className="flex items-center gap-4 bg-white p-3 rounded-lg shadow-sm border border-gray-200">
           <button
             onClick={() => navigate('/masters/drawings')}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -449,27 +471,11 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
         </div>
 
         {/* Form */}
-        <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-          <form onSubmit={handleSave} className="space-y-6">
+        <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200 overflow-auto flex-1">
+          <form onSubmit={handleSave} className="space-y-4">
 
             {/* Row 1: Tank + Text References */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Tank Selection */}
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-gray-700">Tank Number <span className="text-red-500">*</span></label>
-                <select
-                  value={formData.tank_id}
-                  onChange={(e) => setFormData(p => ({ ...p, tank_id: e.target.value }))}
-                  className="h-11 border border-gray-300 rounded px-3 focus:ring-2 focus:ring-[#546E7A] outline-none"
-                  disabled={mode === 'edit'}
-                >
-                  <option value="">-- Select Tank --</option>
-                  {tanks.map(t => (
-                    <option key={t.id} value={t.id}>{t.tank_number}</option>
-                  ))}
-                </select>
-              </div>
-
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* P&ID Reference (text) */}
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-gray-700">P&ID Reference</label>
@@ -481,26 +487,31 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
                   className="h-11 border border-gray-300 rounded px-3 focus:ring-2 focus:ring-[#546E7A] outline-none"
                 />
               </div>
+            </div>
 
-              {/* GA Drawing (text) */}
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-gray-700">GA Drawing Reference</label>
-                <input
-                  type="text"
-                  placeholder="e.g. STD-GA-001"
-                  value={formData.ga_drawing}
-                  onChange={(e) => setFormData(p => ({ ...p, ga_drawing: e.target.value }))}
-                  className="h-11 border border-gray-300 rounded px-3 focus:ring-2 focus:ring-[#546E7A] outline-none"
-                />
-              </div>
+            {/* Row: Remarks */}
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-bold text-gray-700">Remarks</label>
+              <input
+                type="text"
+                placeholder="Enter remarks (max 30 chars)..."
+                maxLength={30}
+                value={formData.remarks}
+                onChange={(e) => setFormData(p => ({ ...p, remarks: e.target.value }))}
+                className="h-11 border border-gray-300 rounded px-3 focus:ring-2 focus:ring-[#546E7A] outline-none"
+              />
             </div>
 
             {/* Row 2: Two JPEG Upload Slots */}
             <div>
               <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 border-b pb-2">Drawing Images</h3>
-              <div className="flex flex-col sm:flex-row gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <ImageUploadCard field="pid_drawing" label="P&ID Drawing" />
-                <ImageUploadCard field="ga_drawing_file" label="GA Drawing" />
+                <ImageUploadCard field="image2_drawing_file" label="Image 2" />
+                <ImageUploadCard field="img3" label="Image 3" />
+                <ImageUploadCard field="img4" label="Image 4" />
+                <ImageUploadCard field="img5" label="Image 5" />
+                <ImageUploadCard field="img6" label="Image 6" />
               </div>
             </div>
 

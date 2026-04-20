@@ -242,7 +242,8 @@ def create_tank(data: dict, db: Session = Depends(get_db),current_user: User = D
             evacuation_valve=data.get("evacuation_valve"),
             product_id=data.get("product_id"),
             safety_valve_brand_id=data.get("safety_valve_brand_id"),
-            tank_number_image_path=data.get("tank_number_image_path")
+            tank_number_image_path=data.get("tank_number_image_path"),
+            remark2=data.get("remark2")
         )
 
         db.add(tank_detail)
@@ -347,6 +348,7 @@ def get_all_tanks(db: Session = Depends(get_db)):
             "product_id": r[1].product_id,
             "safety_valve_brand_id": r[1].safety_valve_brand_id,
             "tank_number_image_path": to_cdn_url(r[1].tank_number_image_path) if r[1].tank_number_image_path else None,
+            "remark2": r[1].remark2,
             "regulations": regulation_names
         })
     
@@ -485,7 +487,7 @@ def update_tank(tank_id: int, data: dict, db: Session = Depends(get_db), current
         "working_pressure", "cabinet_type", "frame_type",
         "tank_iso_code", "standard",
         "color_body_frame", "evacuation_valve", "tank_number_image_path",
-        "product_id", "safety_valve_brand_id"
+        "product_id", "safety_valve_brand_id", "pid_id", "ga_id", "remark2"
     ]
 
     for field in detail_fields:
@@ -638,7 +640,10 @@ def get_tank_by_id(tank_id: int, db: Session = Depends(get_db)):
         "evacuation_valve": tank_detail.evacuation_valve,
         "product_id": tank_detail.product_id,
         "safety_valve_brand_id": tank_detail.safety_valve_brand_id,
+        "pid_id": getattr(tank_detail, 'pid_id', None),
+        "ga_id": getattr(tank_detail, 'ga_id', None),
         "tank_number_image_path": to_cdn_url(tank_detail.tank_number_image_path) if tank_detail.tank_number_image_path else None,
+        "remark2": tank_detail.remark2,
         "regulations": regulation_ids
     }
 

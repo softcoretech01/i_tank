@@ -96,7 +96,7 @@ export default function TankValveTab({ tankId, onNext, onClose }) {
             }));
 
             const payload = {
-                tank_id: tankId,
+                tank_id: Number(tankId),
                 valves: payloadValves
             };
 

@@ -5,10 +5,10 @@ const tabs = [
     { key: 'tank', label: 'Tank' },
     //{ key: 'cargo', label: 'Cargo' },//
     { key: 'certificate', label: 'Certificate' },
-    { key: 'drawing', label: 'Drawings' },
+    { key: 'drawing', label: 'P&ID Drawings' },
     { key: 'valve', label: 'Valve' },
     { key: 'gauge', label: 'Gauge' },
-    { key: 'valve_shell', label: 'Valve & Shell' },
+    { key: 'tank_frame', label: 'Tank Frame' },
     // { key: 'others', label: 'Others' },  // Hidden tab: kept in source for future re-enable
 ];
 

@@ -253,9 +253,8 @@ def fetch_tank_details(db: Session, tank_number: str):
         text(
             """
             SELECT t.working_pressure, t.frame_type, t.design_temperature, t.cabinet_type, t.mfgr, t.ownership,
-                   t.product_id, pm.product_name, t.safety_valve_brand_id, sv.brand_name AS safety_valve_brand_name
+                   t.safety_valve_brand_id, sv.brand_name AS safety_valve_brand_name
             FROM tank_details t
-            LEFT JOIN product_master pm ON t.product_id = pm.id
             LEFT JOIN safety_valve_brand sv ON t.safety_valve_brand_id = sv.id
             WHERE t.tank_number = :tank_number
             LIMIT 1
@@ -280,8 +279,6 @@ def fetch_tank_details(db: Session, tank_number: str):
                 "cabinet_type": mapping.get("cabinet_type"),
                 "mfgr": mapping.get("mfgr"),
                 "ownership": mapping.get("ownership"),
-                "product_id": mapping.get("product_id"),
-                "product_name": mapping.get("product_name"),
                 "safety_valve_brand_id": mapping.get("safety_valve_brand_id"),
                 "safety_valve_brand_name": mapping.get("safety_valve_brand_name"),
             }
@@ -293,10 +290,8 @@ def fetch_tank_details(db: Session, tank_number: str):
                 "cabinet_type": result[3],
                 "mfgr": result[4],
                 "ownership": result[5],
-                "product_id": result[6],
-                "product_name": result[7],
-                "safety_valve_brand_id": result[8],
-                "safety_valve_brand_name": result[9],
+                "safety_valve_brand_id": result[6],
+                "safety_valve_brand_name": result[7],
             }
     except Exception:
         try:
@@ -1534,10 +1529,8 @@ def get_tank_details(
                     t.cabinet_type,
                     t.mfgr,
                     t.ownership,
-                    pm.product_name,
                     sb.brand_name AS safety_valve_brand_name
                 FROM tank_details t
-                LEFT JOIN product_master pm ON t.product_id = pm.id
                 LEFT JOIN safety_valve_brand sb ON t.safety_valve_brand_id = sb.id
                 WHERE t.tank_number = :tn
                 LIMIT 1
@@ -1558,8 +1551,7 @@ def get_tank_details(
                 "cabinet_type": td_row[3],
                 "mfgr": td_row[4],
                 "ownership": td_row[5],
-                "product_name": td_row[6],
-                "safety_valve_brand_name": td_row[7],
+                "safety_valve_brand_name": td_row[6],
             }
         )
 
@@ -1600,7 +1592,6 @@ def get_tank_details(
             "cabinet_type": row.get("cabinet_type"),
             "mfgr": row.get("mfgr"),
             "ownership": row.get("ownership"),
-            "product_name": row.get("product_name"),
             "safety_valve_brand_name": row.get("safety_valve_brand_name"),
             "pi_next_inspection_date": pi_next_inspection_date,
         }

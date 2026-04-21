@@ -328,6 +328,7 @@ class TankInspectionCreate(BaseModel):
     status_id: Optional[int] = None
     inspection_type_id: Optional[int] = None
     location_id: Optional[int] = None
+    safety_valve_brand_id: Optional[int] = None  # nullable
     safety_valve_model_id: Optional[int] = None  # nullable
     safety_valve_size_id: Optional[int] = None   # nullable
     notes: Optional[str] = None
@@ -431,7 +432,7 @@ def get_all_inspections(
             LEFT JOIN product_master pm ON td.product_id = pm.id
             LEFT JOIN inspection_type it ON ti.inspection_type_id = it.id
             LEFT JOIN location_master l ON ti.location_id = l.id
-            LEFT JOIN safety_valve_brand sv ON td.safety_valve_brand_id = sv.id
+            LEFT JOIN safety_valve_brand sv ON COALESCE(ti.safety_valve_brand_id, td.safety_valve_brand_id) = sv.id
             WHERE (ti.is_reviewed = 0 OR ti.is_reviewed IS NULL)
             ORDER BY ti.inspection_date DESC, ti.inspection_id DESC
         """)
@@ -525,7 +526,7 @@ def export_inspections_to_excel(
             LEFT JOIN inspection_type it ON ti.inspection_type_id = it.id
             LEFT JOIN location_master pl ON ti.location_id = pl.id
             LEFT JOIN product_master pm ON td.product_id = pm.id
-            LEFT JOIN safety_valve_brand sb ON td.safety_valve_brand_id = sb.id
+            LEFT JOIN safety_valve_brand sb ON COALESCE(ti.safety_valve_brand_id, td.safety_valve_brand_id) = sb.id
             LEFT JOIN safety_valve_model sm ON ti.safety_valve_model_id = sm.id
             LEFT JOIN safety_valve_size ss ON ti.safety_valve_size_id = ss.id
             ORDER BY ti.inspection_date DESC
@@ -954,6 +955,7 @@ def create_tank_inspection(
         pi_next_date = payload.pi_next_inspection_date if payload.pi_next_inspection_date else fetch_pi_next_inspection_date(db, tank_number)
         ownership_val = tank_details.get("ownership")
         # Sanitize Safety Valve IDs for Insert (Ensure None if invalid)
+        svb = payload.safety_valve_brand_id if is_valid_id(payload.safety_valve_brand_id) else None
         svm = payload.safety_valve_model_id if is_valid_id(payload.safety_valve_model_id) else None
         svs = payload.safety_valve_size_id if is_valid_id(payload.safety_valve_size_id) else None
 
@@ -964,14 +966,14 @@ def create_tank_inspection(
                     INSERT INTO tank_inspection_details
                     (inspection_date, report_number, tank_number, tank_id, status_id, inspection_type_id, location_id,
                      working_pressure, frame_type, design_temperature, cabinet_type, mfgr, pi_next_inspection_date,
-                     safety_valve_model_id, safety_valve_size_id, notes,
+                     safety_valve_brand_id, safety_valve_model_id, safety_valve_size_id, notes,
                      vacuum_reading, vacuum_uom, lifter_weight_value,
                      created_by, updated_by,
                      operator_id, emp_id, ownership, is_submitted, created_at, updated_at)
                     VALUES
                     (:inspection_date, :report_number, :tank_number, :tank_id, :status_id, :inspection_type_id, :location_id,
                      :working_pressure, :frame_type, :design_temperature, :cabinet_type, :mfgr, :pi_next_inspection_date,
-                     :svm, :svs, :notes,
+                     :svb, :svm, :svs, :notes,
                      :vacuum_reading, :vacuum_uom, :lifter_weight_value,
                      :created_by, :updated_by,
                      :operator_id, :emp_id, :ownership, :is_submitted, NOW(), NOW())
@@ -990,7 +992,7 @@ def create_tank_inspection(
                     "cabinet_type": tank_details.get("cabinet_type"),
                     "mfgr": tank_details.get("mfgr"),
                     "pi_next_inspection_date": pi_next_date,
-                    "svm": svm, "svs": svs,
+                    "svb": svb, "svm": svm, "svs": svs,
                     "notes": payload.notes,
                     "vacuum_reading": payload.vacuum_reading,
                     "vacuum_uom": payload.vacuum_uom,
@@ -1004,6 +1006,14 @@ def create_tank_inspection(
                     "is_submitted": 0,
                 },
             )
+            
+            # --- SYNCHRONIZE TANK MASTER ---
+            if svb is not None:
+                db.execute(
+                    text("UPDATE tank_details SET safety_valve_brand_id = :svb WHERE tank_number = :tn"),
+                    {"svb": svb, "tn": tank_number}
+                )
+            
             db.commit()
         except Exception as e:
             db.rollback()
@@ -1037,6 +1047,7 @@ class TankInspectionUpdateModel(BaseModel):
     status_id: Optional[int] = None
     inspection_type_id: Optional[int] = None
     location_id: Optional[int] = None
+    safety_valve_brand_id: Optional[int] = None      # nullable
     safety_valve_model_id: Optional[int] = None      # nullable
     safety_valve_size_id: Optional[int] = None       # nullable
     vacuum_reading: Optional[str] = None
@@ -1057,12 +1068,14 @@ def update_tank_inspection_details(
 ):
     try:
         # 1. Check if inspection exists and role permissions
-        row = db.execute(text("SELECT is_submitted, web_submitted FROM tank_inspection_details WHERE inspection_id = :id"), {"id": inspection_id}).fetchone()
+        row = db.execute(text("SELECT is_submitted, web_submitted, tank_id, tank_number FROM tank_inspection_details WHERE inspection_id = :id"), {"id": inspection_id}).fetchone()
         if not row:
             return error_resp("Inspection not found", 404)
 
         is_submitted = int(row[0])
         web_submitted = int(row[1])
+        current_tank_id = int(row[2])
+        current_tank_number = str(row[3])
         role_id = current_user.role_id
         if (is_submitted == 1 or web_submitted == 1) and role_id == 2:
             return error_resp("Cannot edit submitted inspection", 403)
@@ -1119,7 +1132,7 @@ def update_tank_inspection_details(
         fields_to_update = [
             "inspection_date", "status_id", "inspection_type_id", "location_id",
             "working_pressure", "frame_type", "design_temperature", "cabinet_type", "mfgr",
-            "notes", "ownership", "safety_valve_model_id", "safety_valve_size_id",
+            "notes", "ownership", "safety_valve_brand_id", "safety_valve_model_id", "safety_valve_size_id",
             "vacuum_reading", "vacuum_uom", "lifter_weight_value", "pi_next_inspection_date"
         ]
 
@@ -1128,7 +1141,7 @@ def update_tank_inspection_details(
                 val = update_data[field]
                 
                 # Special Logic for Safety Valve Fields: Force invalid/empty to None
-                if field in ["safety_valve_model_id", "safety_valve_size_id"]:
+                if field in ["safety_valve_brand_id", "safety_valve_model_id", "safety_valve_size_id"]:
                     if not is_valid_id(val):
                         val = None
                 
@@ -1165,6 +1178,16 @@ def update_tank_inspection_details(
 
                 # Run Update
                 db.execute(text(sql), params)
+                
+                # --- SYNCHRONIZE TANK MASTER ---
+                # If safety_valve_brand_id was provided, update the tank_details table by tank_number
+                if "safety_valve_brand_id" in params:
+                    target_tank_number = params.get("tank_number", current_tank_number)
+                    db.execute(
+                        text("UPDATE tank_details SET safety_valve_brand_id = :svb WHERE tank_number = :tn"),
+                        {"svb": params["safety_valve_brand_id"], "tn": target_tank_number}
+                    )
+
                 db.commit()
                 
             except Exception as e:
@@ -1860,9 +1883,20 @@ def submit_inspection(
         try:
             insp_row = db.execute(
                 text("""
-                    SELECT ti.*, t.product_id, t.safety_valve_brand_id
+                    SELECT 
+                        ti.inspection_id, ti.tank_id, ti.tank_number, ti.report_number, ti.inspection_date,
+                        ti.status_id, ti.inspection_type_id, ti.location_id,
+                        ti.vacuum_reading, ti.vacuum_uom, ti.lifter_weight_value,
+                        ti.notes, ti.operator_id, ti.emp_id, ti.ownership,
+                        t.product_id as product_id,
+                        COALESCE(ti.pi_next_inspection_date, cert.next_insp_date) as pi_next_inspection_date
                     FROM tank_inspection_details ti
                     LEFT JOIN tank_details t ON ti.tank_id = t.tank_id
+                    LEFT JOIN (
+                        SELECT tank_number, MAX(next_insp_date) as next_insp_date
+                        FROM tank_certificate
+                        GROUP BY tank_number
+                    ) cert ON ti.tank_number = cert.tank_number
                     WHERE ti.inspection_id = :id
                     LIMIT 1
                 """),
@@ -1893,16 +1927,9 @@ def submit_inspection(
                     if isinstance(v, (int, float)) and int(v) == 0:
                         issues["inspection"].append({"field": f, "reason": "zero or invalid"})
 
-            # Validate PI next inspection date strictly from the inspection row
-            pi_keys = ["pi_next_inspection_date", "pi_next_insp_date", "next_insp_date", "pi_nextinsp_date"]
-            pi_found = False
-            for k in pi_keys:
-                v = insp.get(k)
-                if v is not None and not (isinstance(v, str) and v.strip() == ""):
-                    pi_found = True
-                    break
-                    
-            if not pi_found:
+            # Smart validation: Check if next inspection date was found either in inspection or certificates
+            pi_next = insp.get("pi_next_inspection_date")
+            if pi_next is None or (isinstance(pi_next, str) and pi_next.strip() == ""):
                 issues["inspection"].append({"field": "pi_next_inspection_date", "reason": "null or empty"})
 
         except Exception as e:

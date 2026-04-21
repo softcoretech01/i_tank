@@ -27,6 +27,7 @@ class TankInspectionDetails(Base):
     frame_type = Column(String(255))
     cabinet_type = Column(String(255))
     mfgr = Column(String(255))
+    safety_valve_brand_id = Column(Integer, nullable=True, index=True)
     safety_valve_model_id = Column(Integer, nullable=True, index=True)
     safety_valve_size_id = Column(Integer, nullable=True, index=True)
     # Store next inspection as YYYY/MM (string) to accept year/month input format

@@ -4,6 +4,7 @@ import os
 import shutil
 import uuid
 from fastapi.responses import StreamingResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.models.users_model import User
 from app.database import get_db
@@ -172,9 +173,9 @@ def create_tank(data: dict, db: Session = Depends(get_db),current_user: User = D
 
     # Standard is now optional, can be null
 
-    existing_tank = db.query(Tank).filter(Tank.tank_number == data["tank_number"]).first()
-    if existing_tank:
-        raise HTTPException(status_code=400, detail=f"Tank number '{data['tank_number']}' already exists")
+    # existing_tank = db.query(Tank).filter(Tank.tank_number == data["tank_number"]).first()
+    # if existing_tank:
+    #     raise HTTPException(status_code=400, detail=f"Tank number '{data['tank_number']}' already exists")
 
     tank = Tank(
         tank_number=data["tank_number"],
@@ -309,7 +310,14 @@ def upload_tank_image(file: UploadFile = File(...)):
 
 @router.get("/")
 def get_all_tanks(db: Session = Depends(get_db)):
-    results = db.query(Tank, TankDetails).join(TankDetails, Tank.id == TankDetails.tank_id).all()
+    # Get the latest ID for each unique tank number
+    subquery = db.query(func.max(TankDetails.id)).group_by(TankDetails.tank_number).all()
+    latest_ids = [r[0] for r in subquery if r[0] is not None]
+    
+    if not latest_ids:
+        return []
+
+    results = db.query(Tank, TankDetails).join(TankDetails, Tank.id == TankDetails.tank_id).filter(TankDetails.id.in_(latest_ids)).all()
     
     response_data = []
     for r in results:

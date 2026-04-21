@@ -15,6 +15,9 @@ export default function TankInfoTab({ masters, activeTanks, onSuccess, inspectio
         vacuum_reading: '',
         vacuum_uom: 'Micron',
         lifter_weight_value: '',
+        safety_valve_brand_id: '',
+        product_id: '',
+        pi_next_inspection_date: '',
     });
 
     const [initialFormData, setInitialFormData] = useState(null);
@@ -27,6 +30,16 @@ export default function TankInfoTab({ masters, activeTanks, onSuccess, inspectio
             const res = await getTankDetails(tId);
             if (res.success) {
                 setTankDetails(res.data);
+                if (!inspectionId) {
+                    const updateData = {};
+                    if (res.data.safety_valve_brand_id) updateData.safety_valve_brand_id = res.data.safety_valve_brand_id;
+                    if (res.data.product_id) updateData.product_id = res.data.product_id;
+                    if (res.data.pi_next_inspection_date) updateData.pi_next_inspection_date = res.data.pi_next_inspection_date;
+
+                    if (Object.keys(updateData).length > 0) {
+                        setFormData(prev => ({ ...prev, ...updateData }));
+                    }
+                }
             }
         } catch (err) {
             console.error("Failed to fetch tank details", err);
@@ -47,6 +60,9 @@ export default function TankInfoTab({ masters, activeTanks, onSuccess, inspectio
                         vacuum_reading: insp.vacuum_reading || '',
                         vacuum_uom: insp.vacuum_uom || 'Micron',
                         lifter_weight_value: insp.lifter_weight_value || '',
+                        safety_valve_brand_id: insp.safety_valve_brand_id || '',
+                        product_id: insp.product_id || '',
+                        pi_next_inspection_date: insp.pi_next_inspection_date || '',
                     };
                     setFormData(loadedData);
                     setInitialFormData(JSON.parse(JSON.stringify(loadedData)));
@@ -73,6 +89,12 @@ export default function TankInfoTab({ masters, activeTanks, onSuccess, inspectio
             setSelectedTankNumber(tank ? tank.tank_number : '');
             if (value) {
                 fetchDetails(value);
+                // Also pre-fill the brand from tank details if available
+                const tank = activeTanks.find(t => String(t.tank_id) === String(value));
+                if (tank) {
+                    // We need to wait for fetchDetails or just use the brand from the tank master if it's there
+                    // But fetchDetails returns full data including brand_id
+                }
             } else {
                 setTankDetails(null);
             }
@@ -96,6 +118,9 @@ export default function TankInfoTab({ masters, activeTanks, onSuccess, inspectio
                 status_id: formData.status_id ? parseInt(formData.status_id) : null,
                 inspection_type_id: formData.inspection_type_id ? parseInt(formData.inspection_type_id) : null,
                 location_id: formData.location_id ? parseInt(formData.location_id) : null,
+                safety_valve_brand_id: formData.safety_valve_brand_id ? parseInt(formData.safety_valve_brand_id) : null,
+                product_id: formData.product_id ? parseInt(formData.product_id) : null,
+                pi_next_inspection_date: formData.pi_next_inspection_date || null,
             };
 
             let res;
@@ -233,6 +258,20 @@ export default function TankInfoTab({ masters, activeTanks, onSuccess, inspectio
                             className="text-base"
                         />
 
+                        <FormSelect
+                            label="Safety Valve Brand"
+                            id="safety_valve_brand_id"
+                            name="safety_valve_brand_id"
+                            value={formData.safety_valve_brand_id}
+                            onChange={handleChange}
+                            className="text-base"
+                        >
+                            <option value="">-- Select Brand --</option>
+                            {masters.safety_valve_brands?.map(b => (
+                                <option key={b.id} value={b.id}>{b.brand_name}</option>
+                            ))}
+                        </FormSelect>
+
                         {/* ACTION BUTTONS */}
                         <div className="col-span-1 md:col-span-2 pt-4 flex items-center gap-4">
                             <Button
@@ -310,7 +349,7 @@ export default function TankInfoTab({ masters, activeTanks, onSuccess, inspectio
                                     <div className="bg-white/5 rounded-xl p-3 border border-white/10 shadow-inner">
                                         <label className="text-[9px] font-black text-blue-200 uppercase tracking-[0.2em] block mb-1 text-center">Next Periodic Inspection Due</label>
                                         <p className="text-lg font-black text-center text-[#51cf66] drop-shadow-md">
-                                            {tankDetails.pi_next_inspection_date ? new Date(tankDetails.pi_next_inspection_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'NOT SET'}
+                                            {tankDetails.pi_next_inspection_date || 'NOT SET'}
                                         </p>
                                     </div>
                                 </div>

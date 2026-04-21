@@ -222,8 +222,8 @@ export default function ReviewTab({ inspectionId, onSubmitSuccess, readOnly = fa
 
                         <div>
                             <label className="text-xs uppercase font-bold text-gray-400 block mb-1">Next Periodic Inspection Due</label>
-                            <p className={`text-base font-bold ${inspection?.next_inspection_date ? 'text-gray-800' : 'text-green-500'}`}>
-                                {inspection?.next_inspection_date || 'NOT SET'}
+                            <p className={`text-base font-bold ${inspection?.pi_next_inspection_date ? 'text-gray-800' : 'text-green-500'}`}>
+                                {inspection?.pi_next_inspection_date || 'NOT SET'}
                             </p>
                         </div>
                     </div>

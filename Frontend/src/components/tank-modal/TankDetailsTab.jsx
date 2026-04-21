@@ -562,24 +562,22 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existin
             />
           </div>
 
-          {/* Safety Valve Brand Dropdown */}
+          {/* Safety Valve Brand (Read-only in Tank Master) */}
           <div className="flex flex-col">
             <label className="mb-1 text-sm font-medium text-gray-700">
               Safety Valve Brand
             </label>
-            <select
-              name="safety_valve_brand_id"
-              value={safeValue(formData.safety_valve_brand_id)}
-              onChange={handleChange}
-              className={inputClass}
-            >
-              <option value="">-- Brand --</option>
-              {masterData.safety_valve_brands?.map((opt, idx) => (
-                <option key={idx} value={opt.id}>
-                  {opt.name}
-                </option>
-              ))}
-            </select>
+            <input
+              type="text"
+              value={(() => {
+                const brandId = formData.safety_valve_brand_id;
+                const brand = masterData.safety_valve_brands?.find(b => String(b.id) === String(brandId));
+                return brand ? brand.name || brand.brand_name : 'N/A';
+              })()}
+              readOnly
+              className={`${inputClass} bg-gray-100 cursor-not-allowed`}
+              placeholder="Set from Inspection"
+            />
           </div>
 
           {/* Capacity */}

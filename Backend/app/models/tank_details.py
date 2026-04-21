@@ -6,7 +6,7 @@ class TankDetails(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tank_id = Column(Integer, ForeignKey("tank_header.id"), unique=True, index=True)
-    tank_number = Column(String(50), ForeignKey("tank_header.tank_number"), nullable=False)
+    tank_number = Column(String(50), nullable=False)
     tank_iso_code = Column(String(255), nullable=True)  # ISO code label from master
     # Allow multiple standard names stored as comma-separated values
     standard = Column(String(255), nullable=True)       # Standard label(s) from master

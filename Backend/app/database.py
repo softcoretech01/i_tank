@@ -378,8 +378,7 @@ def init_db():
                         `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         `created_by` VARCHAR(100),
-                        `updated_by` VARCHAR(100),
-                        UNIQUE KEY `uq_tank_header_tank_number` (`tank_number`)
+                        `updated_by` VARCHAR(100)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 """))
                 logger.info("Created tank_header table (manual fallback).")
@@ -419,9 +418,7 @@ def init_db():
                         `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         UNIQUE KEY `uq_tank_details_tank_id` (`tank_id`),
-                        UNIQUE KEY `uq_tank_details_tank_number` (`tank_number`),
-                        CONSTRAINT fk_tank_id FOREIGN KEY (`tank_id`) REFERENCES tank_header(`id`) ON DELETE SET NULL,
-                        CONSTRAINT fk_tank_number FOREIGN KEY (`tank_number`) REFERENCES tank_header(`tank_number`) ON DELETE SET NULL
+                        CONSTRAINT fk_tank_id FOREIGN KEY (`tank_id`) REFERENCES tank_header(`id`) ON DELETE SET NULL
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                 """))
                 logger.info("Created/updated tank_details table schema.")
@@ -454,6 +451,7 @@ def init_db():
                         `frame_type` VARCHAR(255),
                         `cabinet_type` VARCHAR(255),
                         `mfgr` VARCHAR(255),
+                        `safety_valve_brand_id` INT,
                         `safety_valve_model_id` INT,
                         `safety_valve_size_id` INT,
                         `pi_next_inspection_date` VARCHAR(7),

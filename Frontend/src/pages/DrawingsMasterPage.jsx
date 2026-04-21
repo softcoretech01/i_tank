@@ -13,6 +13,8 @@ import {
 } from '../services/tankDrawingService';
 import { getTanks } from '../services/tankService';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
+import { exportToCSV } from '../utils/exportUtils';
+
 
 // Max 2 MB
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
@@ -237,6 +239,21 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
     }
   };
 
+  const handleExport = () => {
+    const headers = [
+      { label: 'ID', key: 'serial' },
+      { label: 'P&ID Reference', key: 'pid_reference' },
+      { label: 'Remarks', key: 'remarks' },
+      { 
+        label: 'Status', 
+        key: 'status',
+        formatter: (val) => Number(val ?? 1) === 1 ? 'Active' : 'Inactive'
+      }
+    ];
+    exportToCSV(filteredItems, headers, 'Drawings_Master.csv');
+  };
+
+
   // --- Upload Card Component ---
   const ImageUploadCard = ({ field, label }) => {
     const file = formData[field];                    // newly selected File
@@ -380,9 +397,10 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
                 <Button onClick={handleShowAll} icon={RotateCcw} className="bg-[#455A64] hover:bg-[#37474F]">
                   Show All
                 </Button>
-                <Button variant="primary" icon={FileSpreadsheet} className="bg-[#2E7D32] hover:bg-[#1B5E20]">
+                <Button onClick={handleExport} variant="primary" icon={FileSpreadsheet} className="bg-[#2E7D32] hover:bg-[#1B5E20]">
                   Export to Excel
                 </Button>
+
               </div>
             </div>
           </div>
@@ -405,9 +423,9 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
                 ) : filteredItems.length === 0 ? (
                   <tr><td colSpan="7" className="py-10 text-center text-gray-400 italic">No records found.</td></tr>
                 ) : (
-                  filteredItems.map((item) => (
+                  filteredItems.map((item, index) => (
                     <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 text-sm text-gray-500">{item.id}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500">{index + 1}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{item.pid_reference || '-'}</td>
                       <td className="px-6 py-4 text-sm text-gray-500 italic max-w-[120px] truncate" title={item.remarks}>{item.remarks || '-'}</td>
                       <td className="px-6 py-4 text-center text-sm">

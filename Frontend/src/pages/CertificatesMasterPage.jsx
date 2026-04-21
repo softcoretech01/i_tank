@@ -7,6 +7,8 @@ import {
 import { Button } from '../components/ui/Button';
 import { getAllCertificates, createCertificate, updateCertificate } from '../services/tankCertificateService';
 import { getTanks } from '../services/tankService';
+import { exportToCSV } from '../utils/exportUtils';
+
 import { getAllMasterData } from '../services/masterService';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { API_BASE_URL } from '../services/api';
@@ -28,7 +30,7 @@ const addMonthsToMonthStr = (monthStr, monthsToAdd) => {
     const year = parseInt(parts[0], 10);
     const month = parseInt(parts[1], 10);
     if (isNaN(year) || isNaN(month)) return '';
-    
+
     // Add months
     const date = new Date(year, month - 1 + monthsToAdd, 1);
     const y = date.getFullYear();
@@ -44,7 +46,7 @@ const isNearing = (dateStr) => {
   try {
     const today = new Date();
     const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth() + 1; 
+    const currentMonth = today.getMonth() + 1;
 
     // Handle both YYYY/MM and YYYY-MM
     const [y, m] = dateStr.replace('/', '-').split('-').map(Number);
@@ -52,7 +54,7 @@ const isNearing = (dateStr) => {
 
     const targetMonths = y * 12 + (m - 1);
     const currentMonths = currentYear * 12 + (currentMonth - 1);
-    
+
     const diff = targetMonths - currentMonths;
     // Nearing if it's within 6 months
     return diff <= 6;
@@ -265,8 +267,25 @@ export default function CertificatesMasterPage({ mode = 'list' }) {
   const handleShowAll = () => { setSearchTerm(''); setFilterTerm(''); };
 
   const handleExport = (nearingOnly = false) => {
-    const url = `${API_BASE_URL}/tank-certificates/export-to-excel${nearingOnly ? '?nearing=true' : ''}`;
-    window.location.href = url;
+    const dataToExport = nearingOnly ? filteredItems.filter(item => item.isNearing) : filteredItems;
+    
+    const headers = [
+      { label: 'ID', key: 'id' },
+      { label: 'Tank No', key: 'tank_number' },
+      { label: 'Certificate No', key: 'certificate_number' },
+      { label: 'Agency', key: 'inspection_agency' },
+      { label: '2.5Y Insp', key: 'inspection_date_2_5' },
+      { label: 'Next Insp', key: 'next_inspection_date' },
+      { label: 'Remarks', key: 'remarks' },
+      { 
+        label: 'Status', 
+        key: 'status',
+        formatter: (val) => Number(val ?? 1) === 1 ? 'Active' : 'Inactive'
+      }
+    ];
+    
+    const fileName = nearingOnly ? 'Certificates_Nearing_6_Months.csv' : 'Certificates_Master.csv';
+    exportToCSV(dataToExport, headers, fileName);
   };
 
   const handleFileChange = (e, field) => {
@@ -276,7 +295,7 @@ export default function CertificatesMasterPage({ mode = 'list' }) {
     // --- Tank Number Validation (Numeric check) ---
     const selectedTank = tanks.find(t => String(t.id) === String(formData.tank_id));
     const tankNumber = selectedTank ? selectedTank.tank_number : (existingData ? existingData.tank_number : '');
-    
+
     if (!tankNumber) {
       alert('Please select a Tank Number first.');
       e.target.value = '';
@@ -460,9 +479,9 @@ export default function CertificatesMasterPage({ mode = 'list' }) {
               </div>
             </div>
             {isRemoved ? (
-               <div className="text-[10px] text-center text-amber-600 font-bold mt-1">Replacing without cascade</div>
+              <div className="text-[10px] text-center text-amber-600 font-bold mt-1">Replacing without cascade</div>
             ) : (slot.field === 'certificate1' && existingData && existingData.certificate1_path) ? (
-               <div className="text-[10px] text-center text-green-600 font-bold mt-1">Will shift other certs</div>
+              <div className="text-[10px] text-center text-green-600 font-bold mt-1">Will shift other certs</div>
             ) : null}
           </div>
         );
@@ -482,10 +501,10 @@ export default function CertificatesMasterPage({ mode = 'list' }) {
               )}
             </div>
             <div className={`flex flex-col items-center justify-center gap-2 h-28 border-2 rounded-xl px-2 transition-all ${willBeArchived
-                ? 'bg-red-50 border-red-300'
-                : isPreviewShifted
-                  ? 'bg-amber-50 border-amber-300'
-                  : badgeClass
+              ? 'bg-red-50 border-red-300'
+              : isPreviewShifted
+                ? 'bg-amber-50 border-amber-300'
+                : badgeClass
               }`}>
               <FileText className={`w-7 h-7 ${willBeArchived ? 'text-red-400' : isPreviewShifted ? 'text-amber-500' : iconClass}`} />
               <span className="text-[11px] text-center text-gray-600 px-1 line-clamp-2 font-medium">
@@ -496,7 +515,7 @@ export default function CertificatesMasterPage({ mode = 'list' }) {
                 <Eye className="w-3 h-3" /> View PDF
               </a>
             </div>
-            
+
             {!isPreviewShifted && (
               <div className="flex justify-center gap-3 w-full mt-1">
                 <label className="flex items-center justify-center gap-1 cursor-pointer text-[10px] text-indigo-500 hover:text-indigo-700 font-semibold py-0.5 transition-colors">
@@ -635,12 +654,12 @@ export default function CertificatesMasterPage({ mode = 'list' }) {
                 ) : filteredItems.length === 0 ? (
                   <tr><td colSpan="10" className="py-10 text-center text-gray-400 italic">No records found.</td></tr>
                 ) : (
-                  filteredItems.map((item) => {
+                  filteredItems.map((item, index) => {
                     const pdfCount = [item.initial_certificate_path, item.certificate1_path, item.certificate2_path, item.certificate3_path, item.certificate4_path, item.certificate5_path].filter(Boolean).length;
                     const archiveCount = item.archives || 0;
                     return (
                       <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-4 text-sm text-gray-500">{item.id}</td>
+                        <td className="px-4 py-4 text-sm text-gray-500">{index + 1}</td>
                         <td className="px-4 py-4 text-sm font-medium text-gray-700">{item.tank_number}</td>
                         <td className="px-4 py-4 text-sm text-gray-600">{item.certificate_number}</td>
                         <td className="px-4 py-4 text-sm text-gray-600">{item.inspection_agency || '—'}</td>

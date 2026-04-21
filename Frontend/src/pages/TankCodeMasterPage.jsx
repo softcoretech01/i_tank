@@ -2,6 +2,8 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Plus, Edit, Save, X, Search, RotateCcw, FileSpreadsheet } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import api from '../services/api';
+import { exportToCSV } from '../utils/exportUtils';
+
 
 const getNextId = (items) => (items.length > 0 ? Math.max(...items.map((i) => i.id)) + 1 : 1);
 
@@ -121,8 +123,24 @@ export default function TankCodeMasterPage() {
   };
 
   const handleExport = () => {
-    alert('Exporting to Excel...');
+    const headers = [
+      { label: 'ID', key: 'id' },
+      { label: 'Tank Code / ISO Code', key: 'tankcode_iso' },
+      { label: 'Created By', key: 'created_by' },
+      { 
+        label: 'Created At', 
+        key: 'created_at',
+        formatter: (val) => val ? new Date(val).toLocaleString() : 'N/A'
+      },
+      { 
+        label: 'Status', 
+        key: 'status',
+        formatter: (val) => val === 1 ? 'Active' : 'Inactive'
+      }
+    ];
+    exportToCSV(sortedItems, headers, 'TankCode_Master.csv');
   };
+
 
   return (
     <div className="flex flex-col flex-1 p-3 bg-gray-50 overflow-hidden h-full">

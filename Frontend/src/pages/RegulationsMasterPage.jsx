@@ -2,6 +2,8 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Plus, Edit, Save, X, Search, RotateCcw, FileSpreadsheet } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import api from '../services/api';
+import { exportToCSV } from '../utils/exportUtils';
+
 
 // Custom Toggle Component
 const StatusToggle = ({ active, onToggle }) => (
@@ -46,15 +48,27 @@ export default function RegulationsMasterPage() {
   }, []);
 
   const sortedItems = useMemo(() => {
-    let filtered = Array.isArray(items) ? [...items] : [];
+    // 1. Sort the full list alphabetically by name first
+    let baseItems = Array.isArray(items) ? [...items] : [];
+    baseItems.sort((a, b) => (a.regulation_name || '').localeCompare(b.regulation_name || ''));
+
+    // 2. Assign a stable serial number based on this alphabetical order
+    const itemsWithSerial = baseItems.map((item, index) => ({
+      ...item,
+      serial: index + 1
+    }));
+
+    // 3. Filter the list based on the search term (matching either name or the assigned serial)
     if (filterTerm) {
-      filtered = filtered.filter(item =>
+      return itemsWithSerial.filter(item =>
         (item.regulation_name && item.regulation_name.toLowerCase().includes(filterTerm.toLowerCase())) ||
-        (item.id && item.id.toString().includes(filterTerm))
+        (item.serial && item.serial.toString().includes(filterTerm))
       );
     }
-    return filtered.sort((a, b) => (a.regulation_name || '').localeCompare(b.regulation_name || ''));
+
+    return itemsWithSerial;
   }, [items, filterTerm]);
+
 
   const handleSearch = () => {
     setFilterTerm(searchTerm);
@@ -119,8 +133,24 @@ export default function RegulationsMasterPage() {
   };
 
   const handleExport = () => {
-    alert('Exporting to Excel...');
+    const headers = [
+      { label: 'ID', key: 'serial' },
+      { label: 'Regulation Name', key: 'regulation_name' },
+      { label: 'Created By', key: 'created_by' },
+      { 
+        label: 'Created At', 
+        key: 'created_at',
+        formatter: (val) => val ? new Date(val).toLocaleString() : 'N/A'
+      },
+      { 
+        label: 'Status', 
+        key: 'status',
+        formatter: (val) => val === 1 ? 'Active' : 'Inactive'
+      }
+    ];
+    exportToCSV(sortedItems, headers, 'Regulations_Master.csv');
   };
+
 
   return (
     <div className="flex flex-col flex-1 p-3 bg-gray-50 overflow-hidden h-full">
@@ -239,7 +269,8 @@ export default function RegulationsMasterPage() {
               ) : (
                 sortedItems.map((item) => (
                   <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-3 text-base font-medium text-gray-500">{item.id}</td>
+                    <td className="px-6 py-3 text-base font-medium text-gray-500">{item.serial}</td>
+
                     <td className="px-6 py-3 text-base text-gray-800">
                       {editingId === item.id ? (
                         <input

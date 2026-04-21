@@ -12,6 +12,8 @@ import {
 } from '../services/tankframeoutershellService';
 import { getTanks } from '../services/tankService';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
+import { exportToCSV } from '../utils/exportUtils';
+
 
 // Unwrap UniformResponseMiddleware envelope: {success, data, message} → data
 const unwrap = (response) => {
@@ -228,6 +230,36 @@ export default function TankframeAndOuterShellPage({ mode = 'list' }) {
     }
   };
 
+  const handleExport = () => {
+    const headers = [
+      { label: 'ID', key: 'id', formatter: (_, __, index) => index + 1 },
+      { label: 'GA Reference', key: 'ga_reference' },
+      { label: 'Remarks', key: 'remarks' },
+      { 
+        label: 'Status', 
+        key: 'status',
+        formatter: (val) => Number(val ?? 1) === 1 ? 'Active' : 'Inactive'
+      }
+    ];
+    // We pass filteredItems but we want the IDs in the export to be sequential too
+    const dataWithSequence = filteredItems.map((item, index) => ({
+      ...item,
+      export_id: index + 1
+    }));
+    const exportHeaders = [
+      { label: 'ID', key: 'export_id' },
+      { label: 'GA Reference', key: 'ga_reference' },
+      { label: 'Remarks', key: 'remarks' },
+      { 
+        label: 'Status', 
+        key: 'status',
+        formatter: (val) => Number(val ?? 1) === 1 ? 'Active' : 'Inactive'
+      }
+    ];
+    exportToCSV(dataWithSequence, exportHeaders, 'TankFrame_Master.csv');
+  };
+
+
   const ImageUploadCard = ({ slot }) => {
     const file = formData[slot.field];
     const existingUrl = existingData ? existingData[slot.dataField] : null;
@@ -301,7 +333,9 @@ export default function TankframeAndOuterShellPage({ mode = 'list' }) {
             <div className="flex gap-2 font-semibold">
               <Button onClick={handleSearch} icon={Search} className="bg-[#455A64] hover:bg-[#37474F]">Search</Button>
               <Button onClick={handleShowAll} icon={RotateCcw} className="bg-[#455A64] hover:bg-[#37474F]">Reset</Button>
+              <Button onClick={handleExport} icon={FileSpreadsheet} className="bg-[#2E7D32] hover:bg-[#1B5E20]">Export to Excel</Button>
             </div>
+
           </div>
           <div className="flex-1 overflow-auto">
             <table className="w-full">
@@ -320,7 +354,7 @@ export default function TankframeAndOuterShellPage({ mode = 'list' }) {
                 ) : filteredItems.length === 0 ? (
                   <tr><td colSpan="5" className="py-10 text-center text-gray-400 italic font-medium">No records found.</td></tr>
                 ) : (
-                  filteredItems.map(item => {
+                  filteredItems.map((item, index) => {
                     const count = [
                       item.ga_image_path,
                       item.image2_image_path,
@@ -332,7 +366,8 @@ export default function TankframeAndOuterShellPage({ mode = 'list' }) {
 
                     return (
                       <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 text-sm text-gray-500 font-mono">{item.id}</td>
+                        <td className="px-6 py-4 text-sm text-gray-500 font-mono">{index + 1}</td>
+
                         <td className="px-6 py-4 text-sm font-bold text-gray-700">{item.ga_reference || '—'}</td>
                         <td className="px-6 py-4 text-sm text-gray-500 italic max-w-[150px] truncate" title={item.remarks}>{item.remarks || '—'}</td>
                         <td className="px-6 py-4 text-center">

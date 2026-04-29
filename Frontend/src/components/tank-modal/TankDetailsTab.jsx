@@ -9,20 +9,20 @@ import { MultiSelect } from '../ui/MultiSelect';
 
 const initialState = {
   tank_number: '',
-  owner: '',
+  owner: 'Smart Gas',
   mfgr: '',
   initial_test_date: '',
   date_mfg: '',
   pv_code: [],
   tank_code: '',
-  un_code: '',
+  un_code: [],
   capacity_l: '',
   mawp: '',
   design_temperature: '',
   tare_weight_kg: '',
   mgw_kg: '',
   mpl_kg: '',
-  size: '6058 x 2438 x 2591 mm',
+  size: '',
   pump_type: '',
   vesmat: '',
   gross_kg: '',
@@ -36,9 +36,20 @@ const initialState = {
   created_by: 'Admin',
   updated_by: 'Admin',
   regulations: [],
-  product_id: '',
+  product_id: [],
   safety_valve_brand_id: '',
+  pid_id: '',
+  ga_id: '',
   remark2: '',
+  pv_id: '',
+};
+
+// Unwrap UniformResponseMiddleware envelope: {success, data, message} → data
+const unwrap = (response) => {
+  if (response && typeof response === 'object' && !Array.isArray(response) && 'data' in response) {
+    return response.data;
+  }
+  return response;
 };
 
 export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existingTanks }) {
@@ -60,6 +71,9 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existin
     regulations: [],
     products: [],
     safety_valve_brands: [],
+    pv_code: [],
+    evacuation_valve_type: [],
+    color_body_frame: [],
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -79,13 +93,13 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existin
   const getOptValue = (opt) => {
     if (opt === null || opt === undefined) return '';
     if (typeof opt !== 'object') return opt;
-    return opt.name || opt.code || opt.standard || opt.value || opt.label || JSON.stringify(opt);
+    return opt.name || opt.code || opt.standard || opt.value || opt.label || opt.size_label || JSON.stringify(opt);
   };
 
   const getOptLabel = (opt) => {
     if (opt === null || opt === undefined) return '';
     if (typeof opt !== 'object') return opt;
-    return opt.name || opt.label || opt.code || opt.standard || opt.value || JSON.stringify(opt);
+    return opt.name || opt.label || opt.code || opt.standard || opt.value || opt.size_label || JSON.stringify(opt);
   };
 
   const formatTempLabel = (opt) => {
@@ -103,8 +117,9 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existin
         const masterRegs = await getMasterRegulations();
         if (data) {
           // backend uses success_resp which envelopes data in a 'data' field
-          const regsList = (masterRegs?.data && Array.isArray(masterRegs.data))
-            ? masterRegs.data.filter(r => r.status !== 0)
+          const regsRaw = unwrap(masterRegs);
+          const regsList = (regsRaw && Array.isArray(regsRaw))
+            ? regsRaw.filter(r => r.status !== 0)
             : [];
           setMasterData({
             ...data,
@@ -130,7 +145,10 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existin
 
     const fetchTankData = async () => {
       try {
-        const data = await getTankById(tankId);
+        const raw = await getTankById(tankId);
+        const data = unwrap(raw);
+
+        if (!data) return;
 
         let loadedMawp = data.mawp || '';
         if (data.mawp && masterData.mawp?.length > 0) {
@@ -162,19 +180,29 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existin
           tank_code: data.tank_iso_code || '',
           initial_test_date: data.initial_test || '',
           mawp: loadedMawp,
-          size: data.size || '6058 x 2438 x 2591 mm',
+          size: data.size || '',
           pv_code: loadedStandardIds,
           un_code: (() => {
             const unSource = data.un_code || data.un_iso_code || '';
-            if (!unSource) return '';
+            if (!unSource) return [];
             const codes = String(unSource).split(',').map((c) => c.trim());
-            if (codes.length === 0) return '';
             
-            const firstCode = codes[0];
-            const m = masterData.un_iso_code?.find(
-              (u) => getOptValue(u).toString() === firstCode,
-            );
-            return m ? String(m.id) : '';
+            // Map names back to IDs from masterData
+            const ids = codes.map(name => {
+              const m = masterData.un_iso_code?.find(
+                (u) => getOptValue(u).toString() === name,
+              );
+              return m ? String(m.id) : null;
+            }).filter(Boolean);
+            return ids;
+          })(),
+          product_id: (() => {
+            const prodSource = data.product_id || '';
+            if (!prodSource) return [];
+            // If it's already an array (unlikely from API but good to handle)
+            if (Array.isArray(prodSource)) return prodSource.map(String);
+            // CSV of IDs
+            return String(prodSource).split(',').map(s => s.trim()).filter(Boolean);
           })(),
           mpl_kg: (() => {
             const mgw = parseFloat(data.mgw_kg);
@@ -185,9 +213,9 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existin
           })(),
           updated_by: 'Admin',
           regulations: data.regulations || [],
-          product_id: data.product_id || '',
           safety_valve_brand_id: data.safety_valve_brand_id || '',
           remark2: data.remark2 || '',
+          pv_id: data.pv_id || '',
         });
       } catch (err) {
         console.error('Failed to fetch tank data', err);
@@ -212,21 +240,26 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existin
         name === 'tare_weight_kg' ? parseFloat(value) : parseFloat(formData.tare_weight_kg);
       if (!isNaN(mgw) && !isNaN(tare)) newFormData.mpl_kg = (mgw - tare).toString();
     }
-    if (name === 'un_code') {
-      const unCodeId = value;
-      let productId = '';
-      if (unCodeId) {
-        const product = masterData.products?.find(
-          (p) => String(p.un_code_id) === String(unCodeId)
-        );
-        if (product) {
-          productId = String(product.id);
-        }
-      }
-      newFormData.product_id = productId;
-    }
-
     setFormData(newFormData);
+    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }));
+  };
+
+  const handleMultiChange = (name, value) => {
+    setFormData((prev) => {
+      const newFormData = { ...prev, [name]: value };
+      
+      // If un_code changes, automatically select ALL products that match the selected UN codes
+      if (name === 'un_code') {
+        const selectedUnIds = value.map(String);
+        const matchingProducts = (masterData.products || [])
+          .filter(p => selectedUnIds.includes(String(p.un_code_id)))
+          .map(p => String(p.id));
+        
+        newFormData.product_id = matchingProducts;
+      }
+      
+      return newFormData;
+    });
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }));
   };
 
@@ -271,7 +304,6 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existin
       'pump_type',
       'cabinet_type',
       'frame_type',
-      'initial_test_date',
     ];
 
     requiredFields.forEach((field) => {
@@ -329,13 +361,18 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existin
       payload.standard = Array.isArray(formData.pv_code)
         ? formData.pv_code.map((v) => parseInt(v, 10))
         : formData.pv_code;
-      payload.un_code = formData.un_code ? [parseInt(formData.un_code, 10)] : [];
+      payload.un_code = Array.isArray(formData.un_code)
+        ? formData.un_code.map((v) => parseInt(v, 10))
+        : [];
       payload.regulations = Array.isArray(formData.regulations)
         ? formData.regulations.map((v) => parseInt(v, 10))
         : formData.regulations;
 
-      payload.product_id = formData.product_id ? parseInt(formData.product_id, 10) : null;
+      payload.product_id = Array.isArray(formData.product_id)
+        ? formData.product_id.map((v) => parseInt(v, 10))
+        : [];
       payload.safety_valve_brand_id = formData.safety_valve_brand_id ? parseInt(formData.safety_valve_brand_id, 10) : null;
+      payload.pv_id = formData.pv_id ? parseInt(formData.pv_id, 10) : null;
 
       // Remove updated_by as it's set in backend
       payload.updated_by = 'Admin';
@@ -470,7 +507,8 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existin
             {errors.mfgr && <p className="text-xs text-red-500 mt-1">{errors.mfgr}</p>}
           </div>
 
-          {/* Initial Test Date */}
+          {/* Initial Test Date hidden per request */}
+          {/* 
           <div className="flex flex-col">
             <label className="mb-1 text-sm font-medium text-gray-700">
               Initial Test Date <span className="text-red-500">*</span>
@@ -486,6 +524,7 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existin
               <p className="text-xs text-red-500 mt-1">{errors.initial_test_date}</p>
             )}
           </div>
+          */}
 
           {/* Date MFG */}
           <div className="flex flex-col">
@@ -529,35 +568,32 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existin
             <label className="mb-1 text-sm font-medium text-gray-700">
               UN Code <span className="text-red-500">*</span>
             </label>
-            <select
-              name="un_code"
-              value={safeValue(formData.un_code)}
-              onChange={handleChange}
-              className={`${inputClass} ${errors.un_code ? errorClass : ''}`}
-            >
-              <option value="">-- Select UN Code --</option>
-              {masterData.un_iso_code?.map((opt) => (
-                <option key={opt.id} value={String(opt.id)}>
-                  {opt.code || getOptLabel(opt)}
-                </option>
-              ))}
-            </select>
+            <MultiSelect
+              options={(masterData.un_iso_code || [])?.map((opt) => ({
+                label: opt.code || getOptLabel(opt),
+                value: String(opt.id),
+              }))}
+              height="h-24"
+              value={(formData.un_code || []).map(String)}
+              onChange={(val) => handleMultiChange('un_code', val)}
+              placeholder="Select UN Codes..."
+            />
             {errors.un_code && <p className="text-xs text-red-500 mt-1">{errors.un_code}</p>}
           </div>
 
-          {/* Product (Auto-filled from UN Code) */}
+          {/* Product (Filtered by UN Code) */}
           <div className="flex flex-col">
             <label className="mb-1 text-sm font-medium text-gray-700">
               Product
             </label>
-            <input
-              type="text"
-              value={(() => {
-                const prod = masterData.products?.find(p => String(p.id) === String(formData.product_id));
-                return prod ? prod.name : '';
-              })()}
+            <textarea
+              value={(masterData.products || [])
+                .filter(p => (formData.product_id || []).includes(String(p.id)))
+                .map(p => p.product_name || p.name)
+                .join(', ')}
               readOnly
-              className={`${inputClass} bg-gray-100 cursor-not-allowed`}
+              rows={2}
+              className={`${inputClass} bg-gray-100 cursor-not-allowed resize-none`}
               placeholder="Auto-filled from UN Code"
             />
           </div>
@@ -761,13 +797,19 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existin
             <label className="mb-1 text-sm font-medium text-gray-700">
               Size <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
+            <select
               name="size"
-              value={safeValue(formData.size) || '6058 x 2438 x 2591 mm'}
-              readOnly
-              className={`${inputClass} bg-gray-100 cursor-not-allowed ${errors.size ? errorClass : ''}`}
-            />
+              value={safeValue(formData.size)}
+              onChange={handleChange}
+              className={`${inputClass} ${errors.size ? errorClass : ''}`}
+            >
+              <option value="">-- Select Size --</option>
+              {masterData.size?.map((opt, idx) => (
+                <option key={idx} value={getOptValue(opt)}>
+                  {getOptLabel(opt)}
+                </option>
+              ))}
+            </select>
             {errors.size && <p className="text-xs text-red-500 mt-1">{errors.size}</p>}
           </div>
 
@@ -786,25 +828,37 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existin
           {/* Color Body/Frame */}
           <div className="flex flex-col">
             <label className="mb-1 text-sm font-medium text-gray-700">Color – Body /Frame</label>
-            <input
-              type="text"
+            <select
               name="color_body_frame"
               value={safeValue(formData.color_body_frame)}
               onChange={handleChange}
               className={inputClass}
-            />
+            >
+              <option value="">-- Select Color --</option>
+              {masterData.color_body_frame?.map((opt, idx) => (
+                <option key={idx} value={getOptValue(opt)}>
+                  {getOptLabel(opt)}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Evacuation Valve */}
           <div className="flex flex-col">
             <label className="mb-1 text-sm font-medium text-gray-700">Evacuation Valve Type</label>
-            <input
-              type="text"
+            <select
               name="evacuation_valve"
               value={safeValue(formData.evacuation_valve)}
               onChange={handleChange}
               className={inputClass}
-            />
+            >
+              <option value="">-- Select Type --</option>
+              {masterData.evacuation_valve_type?.map((opt, idx) => (
+                <option key={idx} value={getOptValue(opt)}>
+                  {getOptLabel(opt)}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Tank Number Image */}
@@ -835,6 +889,26 @@ export default function TankDetailsTab({ onClose, onSaveSuccess, tankId, existin
             </div>
           </div>
 
+          {/* PV Code */}
+          <div className="flex flex-col">
+            <label className="mb-1 text-sm font-medium text-gray-700">PV Code</label>
+            <select
+              name="pv_id"
+              value={safeValue(formData.pv_id)}
+              onChange={handleChange}
+              className={inputClass}
+            >
+              <option value="">-- Select PV Code --</option>
+              {masterData.pv_code?.map((opt, idx) => (
+                <option key={idx} value={opt.id}>
+                  {opt.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-6">
           {/* Remarks 2 */}
           <div className="flex flex-col col-span-1 sm:col-span-2 lg:col-span-2">
             <label className="mb-1 text-sm font-medium text-gray-700">Remarks 2</label>

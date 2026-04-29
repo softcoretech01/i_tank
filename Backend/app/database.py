@@ -400,7 +400,7 @@ def init_db():
                         `mawp` VARCHAR(50),
                         `design_temperature` VARCHAR(50),
                         `tare_weight_kg` FLOAT,
-                        `product_id` INT,
+                        `product_id` TEXT,
  `safety_valve_brand_id` INT,
                         `mgw_kg` FLOAT,
                         `mpl_kg` FLOAT,

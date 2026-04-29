@@ -37,10 +37,10 @@ export default function TankframeAndOuterShellTab({ tankId, onNext, onClose }) {
 
             // 2. Fetch tank to get current ga_id
             const tankRes = await api.get(`/tanks/${safeTankId}`);
-            const tankData = tankRes.data;
-            if (tankData.ga_id) {
+            const tankData = unwrap(tankRes.data);
+            if (tankData && tankData.ga_id) {
                 setSelectedGaId(tankData.ga_id);
-                const match = activeList.find(d => d.id === tankData.ga_id);
+                const match = activeList.find(d => String(d.id) === String(tankData.ga_id));
                 if (match) setData(match);
             }
         } catch (err) {

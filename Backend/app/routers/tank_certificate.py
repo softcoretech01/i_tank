@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Header
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
+from sqlalchemy import text
 from app.database import get_db
 from app.models.tank_certificate import TankCertificate
 from app.models.tank_header import Tank
@@ -127,35 +128,44 @@ def to_url(raw):
 
 
 def serialize_certificate(cert):
+    # Support both SQLAlchemy Row objects (dot notation) and RowMapping/dict objects (bracket notation)
+    def get_val(obj, key, default=None):
+        if hasattr(obj, key):
+            return getattr(obj, key)
+        try:
+            return obj[key]
+        except (KeyError, TypeError):
+            return default
+
     return {
-        "id": cert.id,
-        "tank_id": cert.tank_id,
-        "tank_number": getattr(cert, "tank_number", "") or "",
-        "certificate_number": cert.certificate_number,
-        "insp_2_5y_date": safe_serialize_date(cert.insp_2_5y_date),
-        "next_insp_date": safe_serialize_date(cert.next_insp_date),
-        "year_of_manufacturing": getattr(cert, "year_of_manufacturing", "") or "",
-        "inspection_agency": getattr(cert, "inspection_agency", "") or "",
-        "status": 0 if getattr(cert, "status", 1) == 0 else 1,
-        "remarks": getattr(cert, "remarks", "") or "",
-        "archives": getattr(cert, "archives", 0) or 0,
+        "id": get_val(cert, "id"),
+        "tank_id": get_val(cert, "tank_id"),
+        "tank_number": get_val(cert, "tank_number") or "",
+        "certificate_number": get_val(cert, "certificate_number"),
+        "insp_2_5y_date": safe_serialize_date(get_val(cert, "insp_2_5y_date")),
+        "next_insp_date": safe_serialize_date(get_val(cert, "next_insp_date")),
+        "year_of_manufacturing": get_val(cert, "year_of_manufacturing") or "",
+        "inspection_agency": get_val(cert, "inspection_agency") or "",
+        "status": 0 if get_val(cert, "status", 1) == 0 else 1,
+        "remarks": get_val(cert, "remarks") or "",
+        "archives": get_val(cert, "archives", 0) or 0,
         # certificate file URLs (6 slots)
-        "initial_certificate_path": to_url(getattr(cert, "initial_certificate_path", None)),
-        "initial_certificate_name": getattr(cert, "initial_certificate_name", None),
-        "certificate1_path": to_url(getattr(cert, "certificate1_path", None)),
-        "certificate1_name": getattr(cert, "certificate1_name", None),
-        "certificate2_path": to_url(getattr(cert, "certificate2_path", None)),
-        "certificate2_name": getattr(cert, "certificate2_name", None),
-        "certificate3_path": to_url(getattr(cert, "certificate3_path", None)),
-        "certificate3_name": getattr(cert, "certificate3_name", None),
-        "certificate4_path": to_url(getattr(cert, "certificate4_path", None)),
-        "certificate4_name": getattr(cert, "certificate4_name", None),
-        "certificate5_path": to_url(getattr(cert, "certificate5_path", None)),
-        "certificate5_name": getattr(cert, "certificate5_name", None),
-        "created_by": cert.created_by,
-        "updated_by": getattr(cert, "updated_by", None),
-        "created_at": cert.created_at.isoformat() if cert.created_at else None,
-        "updated_at": cert.updated_at.isoformat() if cert.updated_at else None,
+        "initial_certificate_path": to_url(get_val(cert, "initial_certificate_path")),
+        "initial_certificate_name": get_val(cert, "initial_certificate_name"),
+        "certificate1_path": to_url(get_val(cert, "certificate1_path")),
+        "certificate1_name": get_val(cert, "certificate1_name"),
+        "certificate2_path": to_url(get_val(cert, "certificate2_path")),
+        "certificate2_name": get_val(cert, "certificate2_name"),
+        "certificate3_path": to_url(get_val(cert, "certificate3_path")),
+        "certificate3_name": get_val(cert, "certificate3_name"),
+        "certificate4_path": to_url(get_val(cert, "certificate4_path")),
+        "certificate4_name": get_val(cert, "certificate4_name"),
+        "certificate5_path": to_url(get_val(cert, "certificate5_path")),
+        "certificate5_name": get_val(cert, "certificate5_name"),
+        "created_by": get_val(cert, "created_by"),
+        "updated_by": get_val(cert, "updated_by"),
+        "created_at": get_val(cert, "created_at").isoformat() if get_val(cert, "created_at") else None,
+        "updated_at": get_val(cert, "updated_at").isoformat() if get_val(cert, "updated_at") else None,
     }
 
 
@@ -225,14 +235,22 @@ def _shift_and_archive(cert, new_path: str, new_name: str):
 # -------- LIST ALL --------
 @router.get("/")
 def get_all_certificates(db: Session = Depends(get_db)):
-    certs = db.query(TankCertificate).all()
-    return [serialize_certificate(c) for c in certs]# -------- EXPORT TO EXCEL --------
+    try:
+        results = db.execute(text("CALL sp_GetAllCertificates()")).mappings().fetchall()
+        return [serialize_certificate(r) for r in results]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving certificates: {str(e)}")
+
+# -------- EXPORT TO EXCEL --------
 @router.get("/export-to-excel")
 def export_certificates_to_excel(
     nearing: Optional[bool] = False,
     db: Session = Depends(get_db)
 ):
-    results = db.query(TankCertificate).all()
+    results = db.execute(text("CALL sp_GetAllCertificates()")).mappings().fetchall()
+    
+    # Convert mappings to objects for serialize helper
+    cert_objects = [type('obj', (object,), dict(r))() for r in results]
     
     if nearing:
         filtered = []
@@ -240,8 +258,8 @@ def export_certificates_to_excel(
         # Today's reference: total months from year 0
         current_total_months = today.year * 12 + (today.month - 1)
         
-        for cert in results:
-            if not cert.next_insp_date:
+        for cert in cert_objects:
+            if not getattr(cert, 'next_insp_date', None):
                 continue
             try:
                 # Format is YYYY/MM
@@ -255,7 +273,7 @@ def export_certificates_to_excel(
                     filtered.append(cert)
             except Exception:
                 continue
-        results = filtered
+        cert_objects = filtered
 
     if not results:
         raise HTTPException(status_code=404, detail="No certificate records found to export")
@@ -279,9 +297,9 @@ def export_certificates_to_excel(
         cell.font = header_font
         cell.alignment = header_alignment
 
-    for row_num, cert in enumerate(results, 2):
+    for row_num, cert in enumerate(cert_objects, 2):
         ws.cell(row=row_num, column=1, value=cert.id)
-        ws.cell(row=row_num, column=2, value=cert.tank_number)
+        ws.cell(row=row_num, column=2, value=getattr(cert, 'tank_number', ''))
         ws.cell(row=row_num, column=3, value=cert.certificate_number)
         ws.cell(row=row_num, column=4, value=cert.inspection_agency)
         ws.cell(row=row_num, column=5, value=safe_serialize_date(cert.insp_2_5y_date))
@@ -321,13 +339,8 @@ def export_certificates_to_excel(
 @router.get("/tank/{tank_id}")
 def get_tank_certificates_by_tank(tank_id: int, db: Session = Depends(get_db)):
     try:
-        certificates = (
-            db.query(TankCertificate)
-            .filter(TankCertificate.tank_id == tank_id)
-            .order_by(TankCertificate.created_at.desc())
-            .all()
-        )
-        return [serialize_certificate(c) for c in certificates]
+        results = db.execute(text("CALL sp_GetCertificatesByTankId(:tid)"), {"tid": tank_id}).mappings().fetchall()
+        return [serialize_certificate(r) for r in results]
     except OperationalError as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Database schema error.")
@@ -339,10 +352,10 @@ def get_tank_certificates_by_tank(tank_id: int, db: Session = Depends(get_db)):
 # -------- READ BY ID --------
 @router.get("/{cert_id}")
 def get_tank_certificate_by_id(cert_id: int, db: Session = Depends(get_db)):
-    cert = db.query(TankCertificate).filter(TankCertificate.id == cert_id).first()
-    if not cert:
+    result = db.execute(text("CALL sp_GetCertificateById(:id)"), {"id": cert_id}).mappings().first()
+    if not result:
         raise HTTPException(status_code=404, detail="Tank certificate not found")
-    return serialize_certificate(cert)
+    return serialize_certificate(result)
 
 
 # -------- CREATE --------
@@ -371,11 +384,12 @@ def create_tank_certificate(
     if tank_id is None:
         raise HTTPException(status_code=400, detail="tank_id is required")
 
-    tank_record = db.query(Tank).filter(Tank.id == tank_id).first()
+    # Use SP to get tank record
+    tank_record = db.execute(text("CALL sp_GetTankById(:tid)"), {"tid": tank_id}).mappings().first()
     if not tank_record:
         raise HTTPException(status_code=404, detail="Tank not found")
 
-    existing_cert = db.query(TankCertificate).filter(TankCertificate.tank_id == tank_id).first()
+    existing_cert = db.execute(text("CALL sp_GetCertificatesByTankId(:tid)"), {"tid": tank_id}).mappings().first()
     if existing_cert:
         raise HTTPException(
             status_code=400,
@@ -406,13 +420,7 @@ def create_tank_certificate(
             pass
 
     # Fetch year_of_manufacturing
-    year_of_manufacturing = None
-    try:
-        from app.models.tank_details import TankDetails
-        tank_details = db.query(TankDetails).filter(TankDetails.tank_id == tank_id).first()
-        year_of_manufacturing = tank_details.date_mfg if tank_details else None
-    except Exception:
-        pass
+    year_of_manufacturing = tank_record.get("date_mfg") if tank_record else None
 
     # Save certificates (on create, all slots including initial are accepted)
     try:
@@ -428,38 +436,23 @@ def create_tank_certificate(
         raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
 
     try:
-        cert = TankCertificate(
-            tank_id=tank_id,
-            tank_number=tank_number,
-            certificate_number=clean_form_data(certificate_number),
-            insp_2_5y_date=_normalize_date_str(insp_2_5y_date),
-            next_insp_date=_normalize_date_str(next_insp_date),
-            inspection_agency=inspection_agency_name,
-            year_of_manufacturing=year_of_manufacturing,
-            initial_certificate_path=ic_path,
-            initial_certificate_name=ic_name,
-            certificate1_path=p1_path,
-            certificate1_name=p1_name,
-            certificate2_path=p2_path,
-            certificate2_name=p2_name,
-            certificate3_path=p3_path,
-            certificate3_name=p3_name,
-            certificate4_path=p4_path,
-            certificate4_name=p4_name,
-            certificate5_path=p5_path,
-            certificate5_name=p5_name,
-            archives=0,
-            status=1,
-            remarks=clean_form_data(remarks),
-            created_by=emp_id,
-            updated_by=emp_id,
-        )
-        db.add(cert)
+        # Use SP for creation
+        res = db.execute(
+            text("CALL sp_UpsertCertificate(:id, :tid, :tnum, :cnum, :insp, :next, :agency, :ymfg, :rem, :stat, :arch, :icp, :icn, :c1p, :c1n, :c2p, :c2n, :c3p, :c3n, :c4p, :c4n, :c5p, :c5n, :eid)"),
+            {
+                "id": 0, "tid": tank_id, "tnum": tank_number, "cnum": clean_form_data(certificate_number),
+                "insp": _normalize_date_str(insp_2_5y_date), "next": _normalize_date_str(next_insp_date),
+                "agency": inspection_agency_name, "ymfg": year_of_manufacturing, "rem": clean_form_data(remarks),
+                "stat": 1, "arch": 0, "icp": ic_path, "icn": ic_name,
+                "c1p": p1_path, "c1n": p1_name, "c2p": p2_path, "c2n": p2_name,
+                "c3p": p3_path, "c3n": p3_name, "c4p": p4_path, "c4n": p4_name,
+                "c5p": p5_path, "c5n": p5_name, "eid": emp_id
+            }
+        ).mappings().first()
+        
         db.commit()
-        db.refresh(cert)
-    except OperationalError as op_err:
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Database mismatch: A column might be missing.")
+        # Fetch the newly created cert
+        cert_row = db.execute(text("CALL sp_GetCertificateById(:id)"), {"id": res["id"]}).mappings().first()
     except Exception as e:
         db.rollback()
         logger.error(traceback.format_exc())
@@ -467,17 +460,16 @@ def create_tank_certificate(
 
     # Sync next inspection date to tank_inspection_details
     try:
-        from sqlalchemy import text
         db.execute(
-            text("UPDATE tank_inspection_details SET pi_next_inspection_date = :next_date WHERE tank_number = :tank_num"),
-            {"next_date": cert.next_insp_date, "tank_num": tank_number}
+            text("CALL sp_SyncNextInspectionDate(:tnum, :next_date)"),
+            {"next_date": _normalize_date_str(next_insp_date), "tnum": tank_number}
         )
         db.commit()
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to sync pi_next_inspection_date: {str(e)}")
 
-    return {"message": "Tank certificate added successfully", "data": serialize_certificate(cert)}
+    return {"message": "Tank certificate added successfully", "data": serialize_certificate(cert_row)}
 
 
 # -------- UPDATE --------
@@ -516,14 +508,17 @@ def update_tank_certificate(
         cert5 → archived (physically deleted, archives counter +1).
     - certificate2–5 are read-only; they are populated automatically by the shift.
     """
-    cert = db.query(TankCertificate).filter(TankCertificate.id == cert_id).first()
-    if not cert:
+    result = db.execute(text("CALL sp_GetCertificateById(:id)"), {"id": cert_id}).mappings().first()
+    if not result:
         raise HTTPException(status_code=404, detail="Tank certificate not found")
+    
+    # Create mutable object for updates
+    cert = type('obj', (object,), dict(result))()
 
     emp_id = get_emp_id_from_token(authorization)
 
-    tank_record = db.query(Tank).filter(Tank.id == cert.tank_id).first()
-    tank_number = tank_record.tank_number if tank_record else "UNKNOWN"
+    tank_record = db.execute(text("CALL sp_GetTankById(:tid)"), {"tid": cert.tank_id}).mappings().first()
+    tank_number = tank_record.get("tank_number") if tank_record else "UNKNOWN"
 
     if certificate_number is not None:
         cert.certificate_number = clean_form_data(certificate_number)
@@ -624,20 +619,27 @@ def update_tank_certificate(
     cert.updated_by = emp_id
 
     try:
+        db.execute(
+            text("CALL sp_UpsertCertificate(:id, :tid, :tnum, :cnum, :insp, :next, :agency, :ymfg, :rem, :stat, :arch, :icp, :icn, :c1p, :c1n, :c2p, :c2n, :c3p, :c3n, :c4p, :c4n, :c5p, :c5n, :eid)"),
+            {
+                "id": cert_id, "tid": cert.tank_id, "tnum": tank_number, "cnum": cert.certificate_number,
+                "insp": cert.insp_2_5y_date, "next": cert.next_insp_date,
+                "agency": cert.inspection_agency, "ymfg": cert.year_of_manufacturing, "rem": cert.remarks,
+                "stat": cert.status, "arch": cert.archives, "icp": cert.initial_certificate_path, "icn": cert.initial_certificate_name,
+                "c1p": cert.certificate1_path, "c1n": cert.certificate1_name, "c2p": cert.certificate2_path, "c2n": cert.certificate2_name,
+                "c3p": cert.certificate3_path, "c3n": cert.certificate3_name, "c4p": cert.certificate4_path, "c4n": cert.certificate4_name,
+                "c5p": cert.certificate5_path, "c5n": cert.certificate5_name, "eid": emp_id
+            }
+        )
         db.commit()
-        db.refresh(cert)
-    except OperationalError as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Database schema mismatch during update.")
     except Exception as e:
         db.rollback()
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=400, detail=f"Database Update Failed: {str(e)}")
 
     try:
-        from sqlalchemy import text
         db.execute(
-            text("UPDATE tank_inspection_details SET pi_next_inspection_date = :next_date WHERE tank_number = :tank_num"),
+            text("CALL sp_SyncNextInspectionDate(:tnum, :next_date)"),
             {"next_date": cert.next_insp_date, "tank_num": tank_number}
         )
         db.commit()
@@ -655,15 +657,17 @@ def delete_tank_certificate(
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(None),
 ):
-    cert = db.query(TankCertificate).filter(TankCertificate.id == cert_id).first()
-    if not cert:
+    result = db.execute(text("CALL sp_GetCertificateById(:id)"), {"id": cert_id}).mappings().first()
+    if not result:
         raise HTTPException(status_code=404, detail="Tank certificate not found")
+    
+    cert = type('obj', (object,), dict(result))()
 
     for field in ["initial_certificate_path", "certificate1_path", "certificate2_path", "certificate3_path", "certificate4_path", "certificate5_path"]:
         p = getattr(cert, field, None)
         if p:
             delete_file_if_exists(UPLOAD_ROOT, p)
 
-    db.delete(cert)
+    db.execute(text("CALL sp_DeleteCertificate(:id)"), {"id": cert_id})
     db.commit()
     return {"message": "Tank certificate deleted successfully"}

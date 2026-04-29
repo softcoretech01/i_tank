@@ -10,7 +10,7 @@ class TankFrameOuter(Base):
     ga_image_path = Column(String(255), nullable=True)
     ga_thumbnail_path = Column(String(255), nullable=True)
     image2_image_path = Column(String(255), nullable=True)
-    image2_thumbnail_path = Column('iamge2_thumbnail_path', String(255), nullable=True)
+    image2_thumbnail_path = Column(String(255), nullable=True)
 
     img3_path = Column(String(255), nullable=True)
     img4_path = Column(String(255), nullable=True)

@@ -21,6 +21,14 @@ const colorMap = {
   indigo: { dot: 'bg-indigo-500', icon: 'bg-indigo-100 text-indigo-600', badge: 'text-indigo-500', btn: 'text-indigo-600 border-indigo-200 hover:bg-indigo-600 hover:text-white hover:border-indigo-600', card: 'border-indigo-100 bg-indigo-50/30 hover:bg-indigo-50 hover:border-indigo-300' },
 };
 
+// Unwrap UniformResponseMiddleware envelope: {success, data, message} → data
+const unwrap = (response) => {
+  if (response && typeof response === 'object' && !Array.isArray(response) && 'data' in response) {
+    return response.data;
+  }
+  return response;
+};
+
 export default function TankDrawingsTab({ tankId, onNext, onClose }) {
   const safeTankId = (typeof tankId === 'object' && tankId !== null) ? tankId.id : tankId;
 
@@ -40,17 +48,17 @@ export default function TankDrawingsTab({ tankId, onNext, onClose }) {
     try {
       setLoading(true);
       // 1. Fetch available drawings from Master
-      const data = await getAllDrawings();
-      const list = Array.isArray(data) ? data : [];
+      const resData = await getAllDrawings();
+      const list = Array.isArray(unwrap(resData)) ? unwrap(resData) : [];
       const activeDrawings = list.filter(item => item.status === 1);
       setAllDrawings(activeDrawings);
 
       // 2. Fetch tank to get current pid_id
       const res = await api.get(`/tanks/${safeTankId}`);
-      const tankData = res.data;
-      if (tankData.pid_id) {
+      const tankData = unwrap(res.data);
+      if (tankData && tankData.pid_id) {
         setSelectedPidId(tankData.pid_id);
-        const match = activeDrawings.find(d => d.id === tankData.pid_id);
+        const match = activeDrawings.find(d => String(d.id) === String(tankData.pid_id));
         if (match) setDrawing(match);
       }
     } catch (err) {

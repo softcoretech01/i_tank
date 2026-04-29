@@ -29,6 +29,7 @@ export default function LoginPage({ onLoginSuccess }) {
         sessionStorage.setItem('userEmail', result.data.email);
         sessionStorage.setItem('loginName', result.data.login_name);
         sessionStorage.setItem('role_id', result.data.role_id);
+        sessionStorage.setItem('emp_id', result.data.emp_id);
         sessionStorage.setItem('web_access', JSON.stringify(result.data.web_access));
         onLoginSuccess();
       } else {

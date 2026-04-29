@@ -101,38 +101,55 @@ export default function App() {
   }
 
   // Main App Layout Component
-  const MainLayout = () => (
-    <div className="flex h-screen w-full bg-gray-100 overflow-hidden">
-      <Sidebar
-        collapsed={sidebarCollapsed}
-        setCollapsed={setSidebarCollapsed}
-        webAccess={webAccess}
-      />
-      <div className="flex-1 min-w-0 flex flex-col overflow-auto bg-gray-50">
-        <Routes>
-          <Route path="/" element={<TankManagementPage />} />
-          <Route path="/ppt" element={<GeneratePPTPage />} />
-          <Route path="/cargo" element={<CargoMasterPage />} />
-          <Route path="/regulations" element={<RegulationsMasterPage />} />
-          <Route path="/masters/tank-code" element={<TankCodeMasterPage />} />
-          <Route path="/masters/regulations" element={<RegulationsMasterPage />} />
-          <Route path="/masters/certificates" element={<CertificatesMasterPage mode="list" />} />
-          <Route path="/masters/certificates/add" element={<CertificatesMasterPage mode="add" />} />
-          <Route path="/masters/certificates/edit/:id" element={<CertificatesMasterPage mode="edit" />} />
-          <Route path="/masters/drawings" element={<DrawingsMasterPage mode="list" />} />
-          <Route path="/masters/drawings/add" element={<DrawingsMasterPage mode="add" />} />
-          <Route path="/masters/drawings/edit/:id" element={<DrawingsMasterPage mode="edit" />} />
-          <Route path="/masters/tank-frame" element={<TankframeAndOuterShellPage mode="list" />} />
-          <Route path="/masters/tank-frame/add" element={<TankframeAndOuterShellPage mode="add" />} />
-          <Route path="/masters/tank-frame/edit/:id" element={<TankframeAndOuterShellPage mode="edit" />} />
-          <Route path="/change-password" element={<ChangePasswordPage />} />
-          <Route path="/inspection/*" element={<InspectionReportPage />} />
-          <Route path="/logout" element={<LogoutHandler onLogout={handleLogout} />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+  const MainLayout = () => {
+    const currentEmpId = sessionStorage.getItem('emp_id');
+    const isRestrictedUser = currentEmpId === '1004';
+
+    return (
+      <div className="flex h-screen w-full bg-gray-100 overflow-hidden">
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          setCollapsed={setSidebarCollapsed}
+          webAccess={webAccess}
+        />
+        <div className="flex-1 min-w-0 flex flex-col overflow-auto bg-gray-50">
+          <Routes>
+            {isRestrictedUser ? (
+              <>
+                <Route path="/masters/certificates" element={<CertificatesMasterPage mode="list" />} />
+                <Route path="/masters/certificates/add" element={<CertificatesMasterPage mode="add" />} />
+                <Route path="/masters/certificates/edit/:id" element={<CertificatesMasterPage mode="edit" />} />
+                <Route path="/logout" element={<LogoutHandler onLogout={handleLogout} />} />
+                <Route path="*" element={<Navigate to="/masters/certificates" replace />} />
+              </>
+            ) : (
+              <>
+                <Route path="/" element={<TankManagementPage />} />
+                <Route path="/ppt" element={<GeneratePPTPage />} />
+                <Route path="/cargo" element={<CargoMasterPage />} />
+                <Route path="/regulations" element={<RegulationsMasterPage />} />
+                <Route path="/masters/tank-code" element={<TankCodeMasterPage />} />
+                <Route path="/masters/regulations" element={<RegulationsMasterPage />} />
+                <Route path="/masters/certificates" element={<CertificatesMasterPage mode="list" />} />
+                <Route path="/masters/certificates/add" element={<CertificatesMasterPage mode="add" />} />
+                <Route path="/masters/certificates/edit/:id" element={<CertificatesMasterPage mode="edit" />} />
+                <Route path="/masters/drawings" element={<DrawingsMasterPage mode="list" />} />
+                <Route path="/masters/drawings/add" element={<DrawingsMasterPage mode="add" />} />
+                <Route path="/masters/drawings/edit/:id" element={<DrawingsMasterPage mode="edit" />} />
+                <Route path="/masters/tank-frame" element={<TankframeAndOuterShellPage mode="list" />} />
+                <Route path="/masters/tank-frame/add" element={<TankframeAndOuterShellPage mode="add" />} />
+                <Route path="/masters/tank-frame/edit/:id" element={<TankframeAndOuterShellPage mode="edit" />} />
+                <Route path="/change-password" element={<ChangePasswordPage />} />
+                <Route path="/inspection/*" element={<InspectionReportPage />} />
+                <Route path="/logout" element={<LogoutHandler onLogout={handleLogout} />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </>
+            )}
+          </Routes>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <Routes>

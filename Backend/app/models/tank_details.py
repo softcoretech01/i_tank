@@ -10,6 +10,7 @@ class TankDetails(Base):
     tank_iso_code = Column(String(255), nullable=True)  # ISO code label from master
     # Allow multiple standard names stored as comma-separated values
     standard = Column(String(255), nullable=True)       # Standard label(s) from master
+    pv_id = Column(Integer, nullable=True)             # Pressure Vessel Code ID from master
     status = Column(String(20), default="active", nullable=False)
     mfgr = Column(String(255))       
     initial_test = Column(String(7), nullable=True)                   # Manufacturer label from master
@@ -30,7 +31,7 @@ class TankDetails(Base):
     frame_type = Column(String(100), nullable=True)      # Frame type label from master
     color_body_frame = Column(String(100), nullable=True)
     evacuation_valve = Column(String(100), nullable=True)
-    product_id = Column(Integer, index=True)
+    product_id = Column(Text, index=True, nullable=True)
     safety_valve_brand_id = Column(Integer, index=True)
     pid_id = Column(Integer, index=True, nullable=True)
     ga_id = Column(Integer, index=True, nullable=True)

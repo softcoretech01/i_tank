@@ -14,6 +14,7 @@ import {
 import { getTanks } from '../services/tankService';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { exportToCSV } from '../utils/exportUtils';
+import { getUploadUrl } from '../services/api';
 
 
 // Max 2 MB
@@ -259,7 +260,8 @@ export default function DrawingsMasterPage({ mode = 'list' }) {
     const file = formData[field];                    // newly selected File
     const removedKey = `${field}_removed`;
     const isRemoved = formData[removedKey] === true;
-    const existingUrl = (!isRemoved && existingData) ? existingData[field] : null;
+    const existingPath = (!isRemoved && existingData) ? existingData[field] : null;
+    const existingUrl = getUploadUrl(existingPath);
     const existingName = existingData
       ? existingData[`${field}_name`] || existingData[`${field}ing_name`] || existingData[`${field}_file_name`]
       : null;

@@ -46,7 +46,6 @@ export default function Sidebar({ collapsed, setCollapsed, webAccess }) {
     { screen: 'Tank details', text: 'Tank Master', path: '/', icon: LayoutList },
     { screen: 'Inspection Report', text: 'Inspection Report', path: '/inspection', icon: FileText },
     { screen: 'Generate PPT', text: 'Generate PPT', path: '/ppt', icon: BarChart2 },
-
   ];
 
   const mastersItems = [
@@ -56,6 +55,14 @@ export default function Sidebar({ collapsed, setCollapsed, webAccess }) {
     { screen: 'Certificates', text: 'Certificates', path: '/masters/certificates', icon: ShieldCheck },
     { screen: 'Tank Frame & Outer Shell', text: 'Tank Frame', path: '/masters/tank-frame', icon: Wrench },
   ];
+
+  const currentEmpId = sessionStorage.getItem('emp_id');
+  const isRestrictedUser = currentEmpId === '1004';
+
+  const filteredNavItems = isRestrictedUser ? [] : navItems.filter(item => hasAccess(item.screen));
+  const filteredMastersItems = isRestrictedUser 
+    ? mastersItems.filter(item => item.screen === 'Certificates')
+    : mastersItems.filter(item => hasAccess(item.screen));
 
   const handleNavigation = (path) => {
     if (!path.startsWith('/masters')) {
@@ -91,21 +98,23 @@ export default function Sidebar({ collapsed, setCollapsed, webAccess }) {
 
       {/* 2. Navigation */}
       <nav className="flex-1 px-2 overflow-y-auto">
-        {/* Masters Toggle Button - Always Visible */}
-        <button
-          onClick={() => setMastersOpen((prev) => !prev)}
-          className={`flex w-full items-center ${collapsed ? 'justify-center' : 'justify-between'} px-4 py-3 mb-2 rounded-lg transition-all duration-200 text-sm font-medium ${mastersOpen ? 'bg-white/20 text-white shadow-sm' : 'text-gray-100 hover:bg-white/10'}`}
-        >
-          <div className="flex items-center gap-2">
-            <Layers className="w-5 h-5" />
-            {!collapsed && <span>Masters</span>}
-          </div>
-          {!collapsed && <ChevronDown className={`w-4 h-4 transition-transform ${mastersOpen ? 'rotate-180' : 'rotate-0'}`} />}
-        </button>
+        {/* Masters Toggle Button - Visible if there are master items */}
+        {filteredMastersItems.length > 0 && (
+          <button
+            onClick={() => setMastersOpen((prev) => !prev)}
+            className={`flex w-full items-center ${collapsed ? 'justify-center' : 'justify-between'} px-4 py-3 mb-2 rounded-lg transition-all duration-200 text-sm font-medium ${mastersOpen ? 'bg-white/20 text-white shadow-sm' : 'text-gray-100 hover:bg-white/10'}`}
+          >
+            <div className="flex items-center gap-2">
+              <Layers className="w-5 h-5" />
+              {!collapsed && <span>Masters</span>}
+            </div>
+            {!collapsed && <ChevronDown className={`w-4 h-4 transition-transform ${mastersOpen ? 'rotate-180' : 'rotate-0'}`} />}
+          </button>
+        )}
 
         {/* Masters Submenu Items - Visible only when mastersOpen */}
         {mastersOpen &&
-          mastersItems
+          filteredMastersItems
             .map(item => (
               <NavItem
                 key={item.path}
@@ -120,8 +129,7 @@ export default function Sidebar({ collapsed, setCollapsed, webAccess }) {
         }
 
 
-        {navItems
-          .filter(item => hasAccess(item.screen))
+        {filteredNavItems
           .map(item => (
             <NavItem
               key={item.path}
@@ -137,13 +145,15 @@ export default function Sidebar({ collapsed, setCollapsed, webAccess }) {
         {/* Separator for User settings */}
         <div className="my-4 border-t border-white/20"></div>
 
-        <NavItem
-          icon={Lock}
-          text="Change Password"
-          active={location.pathname === '/change-password'}
-          onClick={() => navigate('/change-password')}
-          collapsed={collapsed}
-        />
+        {!isRestrictedUser && (
+          <NavItem
+            icon={Lock}
+            text="Change Password"
+            active={location.pathname === '/change-password'}
+            onClick={() => navigate('/change-password')}
+            collapsed={collapsed}
+          />
+        )}
       </nav>
 
       {/* 3. Footer / Logout */}

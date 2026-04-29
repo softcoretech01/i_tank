@@ -25,6 +25,7 @@ from app.models.inspection_valve_model import InspectionValve
 from app.models.inspection_gauge_model import InspectionGauge
 from app.models.tank_frame_outer_model import TankFrameOuter
 from app.models.other_images_model import TankOtherImage
+from app.models.pv_code_master_model import PVCodeMaster
 from pathlib import Path
 from app.utils.s3_utils import to_cdn_url, s3_client, AWS_S3_BUCKET
 # ---------------------------------------------------------------------------
@@ -1306,9 +1307,8 @@ def create_presentation(db: Session, tank_id: int, base_dir: str | None = None, 
         p_val.font.color.rgb = RGBColor(0, 0, 0)
 
     # -------------------------------
-    # Resolve Product & Safety Valve
+    # Resolve Safety Valve
     # -------------------------------
-    product_name = resolve_product_name(db, insp, d, cargos)
     safety_valve_name = resolve_safety_valve_name(db, insp, d)
 
     # Convert dates
@@ -1371,19 +1371,25 @@ def create_presentation(db: Session, tank_id: int, base_dir: str | None = None, 
 
     # Row 9
     set_cell(9, 0, "Net Kg", format_value(d.mpl_kg))
-    set_cell(9, 2, "Product - Last", product_name)
+    check_date = tank.created_at.strftime("%d-%m-%y") if tank.created_at else "-"
+    set_cell(9, 2, "Check By / Date", f"{d.created_by or '-'} / {check_date}")
 
     # Row 10
     set_cell(10, 0, "Capacity Liter", format_value(d.capacity_l))
-    check_date = tank.created_at.strftime("%d-%m-%y") if tank.created_at else "-"
-    set_cell(10, 2, "Check By / Date", f"{d.created_by or '-'} / {check_date}")
+    appr_date = tank.updated_at.strftime("%d-%m-%y") if tank.updated_at else "-"
+    set_cell(10, 2, "Approved By / Date", f"{d.updated_by or '-'} / {appr_date}")
 
     # Row 11
     set_cell(11, 0, "Pump Type", format_value(d.pump_type))
-    # Approved by - User wants this field.
-    # We can try updated_by
-    appr_date = tank.updated_at.strftime("%d-%m-%y") if tank.updated_at else "-"
-    set_cell(11, 2, "Approved By / Date", f"{d.updated_by or '-'} / {appr_date}")
+    
+    # PV Code Logic
+    pv_code_name = "-"
+    if d.pv_id:
+        pv_row = db.query(PVCodeMaster).filter(PVCodeMaster.id == d.pv_id).first()
+        if pv_row:
+            pv_code_name = pv_row.pv_name
+    set_cell(11, 2, "PV Code", pv_code_name)
+    
 
     # Row 12 - Applicable Regulation (Merged)
     reg_names = [r.regulation_name for r in regs if r.regulation_name]

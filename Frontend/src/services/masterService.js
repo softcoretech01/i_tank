@@ -6,7 +6,7 @@ const URL = '/master/all';
 export const getAllMasterData = async () => {
     try {
         const response = await api.get(URL);
-        const data = response.data || {};
+        const data = response.data?.data || response.data || {};
 
         // Normalize keys and filter by status
         const activeOnly = (arr) => Array.isArray(arr) ? arr.filter(item => item.status !== 0) : [];
@@ -28,6 +28,9 @@ export const getAllMasterData = async () => {
             safety_valve_brands: activeOnly(data.safety_valve_brands),
             master_valves: activeOnly(data.master_valves),
             master_gauges: activeOnly(data.master_gauges),
+            pv_code: data.pv_code || [],
+            evacuation_valve_type: activeOnly(data.evacuation_valve_type),
+            color_body_frame: activeOnly(data.color_body_frame),
         };
     } catch (error) {
         console.error('Error fetching master data:', error);
@@ -36,7 +39,8 @@ export const getAllMasterData = async () => {
             design_temperature: [], cabinet: [], frame_type: [], pump: [],
             mawp: [], ownership: [], size: [], inspection_agency: [],
             products: [], safety_valve_brands: [],
-            master_valves: [], master_gauges: []
+            master_valves: [], master_gauges: [], pv_code: [],
+            evacuation_valve_type: [], color_body_frame: []
         };
     }
 };
